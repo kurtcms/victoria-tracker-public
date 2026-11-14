@@ -1,0 +1,8 @@
+{
+  "compilerOptions": { "strict": true, "lib": ["deno.ns", "dom", "esnext"] },
+  "fmt": { "lineWidth": 120 },
+  "tasks": {
+    "test": "deno test domain_test.ts handler_test.ts",
+    "check": "deno check index.ts domain_test.ts handler_test.ts"
+  }
+}

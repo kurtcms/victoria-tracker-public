@@ -1,0 +1,66 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Talk to ${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talk to ${applicationName}"
+          }
+        }
+      }
+    },
+    "${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "${applicationName}"
+          }
+        }
+      }
+    },
+    "Log with ${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log with ${applicationName}"
+          }
+        }
+      }
+    },
+    "Record with ${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record with ${applicationName}"
+          }
+        }
+      }
+    },
+    "Record an event with ${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Record an event with ${applicationName}"
+          }
+        }
+      }
+    },
+    "Log an event with ${applicationName}": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log an event with ${applicationName}"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
