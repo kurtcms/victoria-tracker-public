@@ -1,0 +1,4 @@
+// Client configuration only. A publishable/anon key is designed to be public.
+SUPABASE_URL = https:/$()/example.supabase.co
+SUPABASE_PUBLISHABLE_KEY = replace-with-public-publishable-key
+#include? "Config.local.xcconfig"

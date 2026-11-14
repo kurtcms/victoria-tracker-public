@@ -1,0 +1,18 @@
+[
+  {
+    "reference": "WHO Child Growth Standards (2006), expanded weight-for-age z-score tables",
+    "sex": "female",
+    "source_url": "https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-age/expanded-tables/wfa-girls-zscore-expanded-tables.xlsx?sfvrsn=f01bc813_10",
+    "source_sha256": "ee3ae12cb96c6c5541cdf43665c03ce6c984f877859a183a5f6104eb06a49a6e",
+    "csv_sha256": "1840a2a3326aa3d886952d02c9ba4699498aeae1dc5b61ada2dcfc876d8af674",
+    "rows": 1857
+  },
+  {
+    "reference": "WHO Child Growth Standards (2006), expanded weight-for-age z-score tables",
+    "sex": "male",
+    "source_url": "https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-age/expanded-tables/wfa-boys-zscore-expanded-tables.xlsx?sfvrsn=65cce121_10",
+    "source_sha256": "b5b4748c6bfa5230e2eddafa1767629c349178b08d457f400b59422b8bfef86c",
+    "csv_sha256": "aa2dc3a776bb511bf4a92ee7b2086be99577febf4906748971f283c520aef101",
+    "rows": 1857
+  }
+]

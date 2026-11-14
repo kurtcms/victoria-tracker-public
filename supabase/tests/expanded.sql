@@ -1,0 +1,114 @@
+begin;
+create function pg_temp.assert_true(ok boolean,label text) returns void language plpgsql as $$
+begin if ok is distinct from true then raise exception 'FAIL: %',label;end if;raise notice 'PASS: %',label;end $$;
+create function pg_temp.expect_error(statement text,expected text) returns void language plpgsql as $$
+begin
+  begin execute statement; exception when others then
+    if sqlstate=expected then raise notice 'PASS: rejected with %',expected;return;end if;raise;
+  end;
+  raise exception 'Expected SQLSTATE %',expected;
+end $$;
+insert into auth.users(id,email) values('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','parent-a@example.invalid'),('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb','parent-b@example.invalid'),('cccccccc-cccc-4ccc-8ccc-cccccccccccc','outside@example.invalid');
+create temporary table care_context(key text primary key,value text);
+grant select,insert,update on care_context to authenticated;
+set local role authenticated;
+select set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',true);
+insert into care_context values('child',(public.create_family_v2('Victoria','UTC')).id::text);
+insert into care_context values('invite',public.create_family_invite());
+create function pg_temp.care(a text,p jsonb,r uuid default gen_random_uuid()) returns jsonb language sql as $$
+ select public.execute_care_command((select value::uuid from care_context where key='child'),r,repeat('a',64),a,now(),'manual',p,'UTC');
+$$;
+select pg_temp.assert_true((public.create_family_v2('Victoria','UTC')).id=(select value::uuid from care_context where key='child'),'family creation retry retains child ID');
+insert into care_context values('second',(public.save_child(null,'Oliver',current_date-120,'male',true,false)).id::text);
+select pg_temp.assert_true((select count(*) from public.children)=2,'two shared baby profiles');
+select public.save_child((select value::uuid from care_context where key='second'),'Ollie',current_date-120,'male',true,false,1,false);
+select pg_temp.assert_true((select name='Ollie' and profile_version=2 from public.children where id=(select value::uuid from care_context where key='second')),'rename preserves child ID and increments version');
+select pg_temp.expect_error($q$select public.save_child(null,' victoria ',null,null,false,null)$q$,'22023');
+select pg_temp.expect_error($q$select public.save_child((select value::uuid from care_context where key='second'),'Changed',null,null,false,null,1,false)$q$,'40001');
+select pg_temp.care('record',jsonb_build_object('event_type','feeding','occurred_at',now()-interval '1 minute','volume_ml',200,'diaper_kind',null,'weight_kg',null),'dddddddd-dddd-4ddd-8ddd-dddddddddddd');
+insert into care_context values('feeding',(select id::text from public.events limit 1));
+insert into care_context values('cancel',(pg_temp.care('propose_feeding','{"correction_kind":"leftover","amount_ml":20}')->>'proposal_id'));
+select pg_temp.assert_true((select volume_ml=200 from public.events),'proposal never changes feeding before confirmation');
+select pg_temp.care('cancel',jsonb_build_object('proposal_id',(select value from care_context where key='cancel')));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='cancel')));
+select pg_temp.assert_true((select volume_ml=200 from public.events),'cancelled confirmation cannot change feeding');
+insert into care_context values('proposal',(pg_temp.care('propose_feeding','{"correction_kind":"leftover","amount_ml":20}')->>'proposal_id'));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='proposal')));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='proposal')));
+select pg_temp.assert_true((select volume_ml=180 and revision=2 and feeding_basis_ml=200 from public.events),'confirmed leftover sets intake once and retains original bottle basis');
+select pg_temp.assert_true(pg_temp.care('propose_feeding','{"correction_kind":"leftover","amount_ml":20}')->>'status'='rejected','repeating leftover does not subtract twice');
+select pg_temp.assert_true((select count(*) from public.care_revisions where target_type='feeding')=1,'confirmation replay creates no extra revision');
+select pg_temp.assert_true(pg_temp.care('propose_feeding','{"correction_kind":"leftover","amount_ml":200}')->>'status'='needs_clarification','whole-bottle leftover asks for an explicit consumed total instead of a zero proposal');
+select pg_temp.assert_true((select volume_ml=180 and revision=2 from public.events),'whole-bottle clarification never changes the event');
+select pg_temp.assert_true((select message like 'I heard 20 millilitres left.%' from public.care_proposals where id=(select value::uuid from care_context where key='proposal')),'confirmation explicitly echoes the grounded leftover amount');
+reset role;
+insert into public.care_proposals(id,child_id,recorded_by,target_type,target_id,expected_revision,changes,message)
+values('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',(select value::uuid from care_context where key='child'),'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','feeding',(select value::uuid from care_context where key='feeding'),2,'{"volume_ml":0,"basis_ml":200,"leftover_ml":200,"void":true}','Legacy unsafe proposal');
+set local role authenticated;
+select pg_temp.assert_true(pg_temp.care('confirm','{"proposal_id":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"}')->>'status'='rejected','legacy unconfirmed whole-bottle leftover cannot be confirmed after upgrade');
+select pg_temp.assert_true((select volume_ml=180 and revision=2 from public.events),'legacy unsafe confirmation leaves the feeding unchanged');
+
+insert into care_context values('stale',(pg_temp.care('propose_feeding','{"correction_kind":"total","amount_ml":170}')->>'proposal_id'));
+select set_config('request.jwt.claim.sub','bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',true);
+select public.join_family((select value from care_context where key='invite'));
+select pg_temp.assert_true((select count(*) from public.children)=2,'second parent sees both babies');
+select pg_temp.assert_true((select count(*) from public.care_proposals)=0,'proposals private to their acting parent');
+select pg_temp.expect_error($q$select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='stale')))$q$,'42501');
+insert into care_context values('partner',(pg_temp.care('propose_feeding','{"correction_kind":"total","amount_ml":190}')->>'proposal_id'));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='partner')));
+select set_config('request.jwt.claim.sub','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',true);
+select pg_temp.assert_true(pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='stale')))->>'status'='rejected','other-parent revision invalidates old approval');
+select pg_temp.assert_true((select volume_ml=190 from public.events),'stale confirmation cannot overwrite partner');
+select pg_temp.assert_true((select feeding_basis_ml=200 from public.events),'absolute intake corrections preserve original bottle basis');
+select pg_temp.assert_true(pg_temp.care('propose_feeding','{"correction_kind":"leftover","amount_ml":10}')->>'status'='rejected','partner total plus equivalent leftover cannot subtract twice');
+select pg_temp.expect_error($q$select pg_temp.care('propose_feeding','{"correction_kind":"leftover","amount_ml":250}')$q$,'22023');
+insert into care_context values('zero',(pg_temp.care('propose_feeding','{"correction_kind":"total","amount_ml":0}')->>'proposal_id'));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='zero')));
+select pg_temp.assert_true((select count(*) from public.events)=0,'zero consumed feeding excluded from legacy and current totals');
+select pg_temp.expect_error($q$select public.record_event((select value::uuid from care_context where key='child'),'dddddddd-dddd-4ddd-8ddd-dddddddddddd',repeat('a',64),'feeding',now(),'siri',200,null,null)$q$,'23505');
+select pg_temp.care('sleep_start',jsonb_build_object('occurred_at',now()-interval '2 hours'),'11111111-1111-4111-8111-111111111111');
+select pg_temp.care('sleep_start',jsonb_build_object('occurred_at',now()-interval '2 hours'),'11111111-1111-4111-8111-111111111111');
+select pg_temp.assert_true((select count(*) from public.sleep_sessions)=1,'sleep start retries are idempotent');
+select pg_temp.assert_true(pg_temp.care('sleep_start',jsonb_build_object('occurred_at',now()-interval '90 minutes'))->>'status'='needs_clarification','duplicate start explains overlapping sleep');
+select pg_temp.expect_error($q$select pg_temp.care('sleep_end',jsonb_build_object('occurred_at',now()-interval '3 hours'))$q$,'22023');
+select pg_temp.care('sleep_end',jsonb_build_object('occurred_at',now()-interval '1 hour'));
+select pg_temp.assert_true((select extract(epoch from(ended_at-started_at))=3600 from public.sleep_sessions),'wake closes correct shared sleep duration');
+select pg_temp.assert_true(pg_temp.care('sleep_end',jsonb_build_object('occurred_at',now()))->>'status'='needs_clarification','wake without start asks for missing start');
+select pg_temp.care('sleep_interval',jsonb_build_object('occurred_at',now()-interval '3 hours','ended_at',now()-interval '2 hours'));
+select pg_temp.assert_true((select count(*) from public.sleep_sessions)=2,'adjacent sleeps do not overlap');
+select pg_temp.assert_true(pg_temp.care('sleep_interval',jsonb_build_object('occurred_at',now()-interval '150 minutes','ended_at',now()-interval '90 minutes'))->>'status'='needs_clarification','overlapping backfill never inserts');
+select pg_temp.expect_error($q$select pg_temp.care('sleep_start',jsonb_build_object('occurred_at',now()+interval '1 second'))$q$,'22023');
+select pg_temp.care('milestone',jsonb_build_object('title','First smile','occurred_on',current_date,'date_precision','day','is_first',true));
+select pg_temp.assert_true(pg_temp.care('milestone',jsonb_build_object('title','First smile','occurred_on',current_date,'date_precision','day','is_first',true))->>'status'='needs_clarification','duplicate milestone first asks rather than inserts');
+select pg_temp.care('milestone',jsonb_build_object('title','Found her toes','occurred_on',current_date,'date_precision','day','is_first',false));
+select pg_temp.care('milestone',jsonb_build_object('title','Rolled over','occurred_on',date_trunc('month',now())::date,'date_precision','month','is_first',true));
+select pg_temp.assert_true((select count(*) from public.milestones)=3,'multiple milestones and month-only memory coexist');
+select pg_temp.expect_error($q$select pg_temp.care('milestone',jsonb_build_object('title','Future','occurred_on',current_date+1,'date_precision','day','is_first',false))$q$,'22023');
+insert into care_context values('edit',(pg_temp.care('propose_edit',jsonb_build_object('target_type','milestone','target_id',(select id from public.milestones where title='First smile'),'expected_revision',1,'title','Smiled at us','occurred_on',current_date,'date_precision','day','void',false))->>'proposal_id'));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='edit')));
+select pg_temp.assert_true((select count(*) from public.milestones where title='Smiled at us' and revision=2)=1,'milestone edit requires confirmation and retains identity');
+select pg_temp.care('record',jsonb_build_object('event_type','weight','occurred_at',now(),'volume_ml',null,'diaper_kind',null,'weight_kg',7.5,'measurement_date',current_date));
+insert into care_context values('weight_edit',(pg_temp.care('propose_edit',jsonb_build_object('target_type','event','target_id',(select id from public.events where event_type='weight'),'expected_revision',1,'weight_kg',7.6,'measurement_date',current_date,'occurred_at',now(),'void',false))->>'proposal_id'));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='weight_edit')));
+select pg_temp.assert_true((select weight_kg=7.6 and revision=2 from public.events where event_type='weight'),'weight correction changes same measurement only after confirmation');
+select pg_temp.care('record',jsonb_build_object('event_type','diaper','occurred_at',now(),'volume_ml',null,'diaper_kind','wet','weight_kg',null));
+insert into care_context values('diaper_edit',(pg_temp.care('propose_edit',jsonb_build_object('target_type','event','target_id',(select id from public.events where event_type='diaper'),'expected_revision',1,'diaper_kind','mixed','occurred_at',now(),'void',false))->>'proposal_id'));
+select pg_temp.care('confirm',jsonb_build_object('proposal_id',(select value from care_context where key='diaper_edit')));
+select pg_temp.assert_true((select diaper_kind='mixed' and revision=2 from public.events where event_type='diaper'),'diaper correction updates shared counts without a duplicate event');
+select public.execute_care_command((select value::uuid from care_context where key='child'),gen_random_uuid(),repeat('9',64),'milestone',
+  ((current_date-1)+time '07:30') at time zone 'UTC','manual',
+  jsonb_build_object('title','Phone local day','occurred_on',current_date-1,'date_precision','day','is_first',false),
+  'America/Vancouver',-25200,jsonb_build_array(jsonb_build_object('from',(((current_date-1)+time '07:30') at time zone 'UTC')-interval '366 days','seconds',-25200)));
+select pg_temp.assert_true((select count(*) from public.milestones where title='Phone local day' and occurred_on=current_date-1)=1,'database dates honor captured phone offset instead of older server rules');
+select pg_temp.expect_error($q$insert into public.sleep_sessions(child_id,started_at,recorded_by,input_source) values((select value::uuid from care_context where key='child'),now(),auth.uid(),'manual')$q$,'42501');
+select pg_temp.expect_error($q$delete from public.milestones$q$,'42501');
+select pg_temp.expect_error($q$select private.care_keys('{}',array[]::text[])$q$,'42501');
+select pg_temp.assert_true(not has_function_privilege('anon','public.execute_care_command(uuid,uuid,text,text,timestamptz,public.input_source,jsonb,text,integer,jsonb)','EXECUTE'),'anonymous cannot execute new command RPC');
+select pg_temp.care('sleep_start',jsonb_build_object('occurred_at',now()));
+select pg_temp.expect_error($q$select public.save_child((select value::uuid from care_context where key='child'),'Victoria',null,null,false,null,1,true)$q$,'22023');
+select set_config('request.jwt.claim.sub','cccccccc-cccc-4ccc-8ccc-cccccccccccc',true);
+select pg_temp.assert_true((select count(*) from public.children)=0 and (select count(*) from public.sleep_sessions)=0 and (select count(*) from public.milestones)=0 and (select count(*) from public.care_receipts)=0 and (select count(*) from public.care_proposals)=0 and (select count(*) from public.care_revisions)=0,'unrelated account sees no new family data');
+select pg_temp.expect_error($q$select pg_temp.care('sleep_start',jsonb_build_object('occurred_at',now()))$q$,'42501');
+reset role;
+select pg_temp.assert_true((select count(*) from public.events where voided_at is not null)=1,'void preserves original event for audit');
+rollback;

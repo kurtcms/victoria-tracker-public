@@ -1,0 +1,7 @@
+// Copy to Config.local.xcconfig (ignored by Git).
+// $() preserves // in xcconfig URL values; // alone starts a comment.
+SUPABASE_URL = https:/$()/YOUR_PROJECT_REF.supabase.co
+SUPABASE_PUBLISHABLE_KEY = sb_publishable_REPLACE_WITH_YOUR_PUBLIC_KEY
+
+// Optional: keep your signing team local, or select it in Xcode.
+// DEVELOPMENT_TEAM = YOUR_APPLE_TEAM_ID
