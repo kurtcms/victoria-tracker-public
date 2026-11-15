@@ -10,10 +10,24 @@ The MVP is version **1.0, build 13**. It uses a short Siri conversation:
 
 Siri confirms only after the database confirms saving. English and an internet connection are required. Arbitrary descriptions cannot reliably be captured inside a single App Shortcut trigger; the supported interaction is two turns. [Siri behavior and examples](docs/SIRI.md)
 
+## Demo
+
+<a href="https://github.com/user-attachments/assets/3daf4e10-2eb3-47ad-a6f9-5e00d1d11e1d">
+  <img src="docs/images/demo-preview.jpg" alt="Watch Victoria Tracker: Siri recording, daily care totals, growth charts and milestones" width="260">
+</a>
+
+[Watch the 45-second demo](https://github.com/user-attachments/assets/3daf4e10-2eb3-47ad-a6f9-5e00d1d11e1d) — Siri recording, daily care totals, WHO growth charts and milestones.
+
+Recorded on a physical iPhone using a showcase account with synthetic data.
+
+## Built with Codex
+
+I defined the product, directed development, and tested the app on physical iPhones. OpenAI Codex generated the implementation, tests, and documentation through iterative conversations. See the [release notes](docs/RELEASE.md) for validation results and known limitations.
+
 ## 1. Get the project and prerequisites
 
 ```sh
-git clone https://github.com/kurtcms/victoria-tracker-public.git
+git clone https://github.com/kurtcms/victoria-tracker-public.git victoria-tracker
 cd victoria-tracker
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 xcodebuild -version
