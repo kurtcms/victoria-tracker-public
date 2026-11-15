@@ -1,5 +1,9 @@
 # Victoria Tracker
 
+## Local checkout roles
+
+When maintaining both repositories, keep permanent sibling folders named `victoria-tracker-private` and `victoria-tracker-public`. Develop and test in the private checkout; use the public checkout to prepare reviewed, sanitized releases. Keep their remotes and histories separate. Public-only contributors can still build the public repository independently using its README.
+
 ## Boundaries that matter
 
 - Keep credentials, sessions, auth links, recordings, real family observations, device IDs and signing material out of Git and logs. Do not read secret-bearing files merely to document configuration.

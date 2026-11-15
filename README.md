@@ -29,8 +29,8 @@ I defined the product, directed development, and tested the app on physical iPho
 ## 1. Get the project and prerequisites
 
 ```sh
-git clone https://github.com/kurtcms/victoria-tracker-public.git victoria-tracker
-cd victoria-tracker
+git clone https://github.com/kurtcms/victoria-tracker-public.git victoria-tracker-public
+cd victoria-tracker-public
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 xcodebuild -version
 ```
