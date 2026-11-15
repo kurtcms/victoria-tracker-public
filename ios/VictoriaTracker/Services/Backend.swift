@@ -498,9 +498,10 @@ extension Backend {
           path: "/functions/v1/care-command", method: "POST", body: encoded, expectedUser: user)
         let result = try APIJSON.decoder().decode(CareResponse.self, from: raw)
         guard
-          ["recorded", "needs_confirmation", "needs_clarification", "rejected"].contains(
+          ["recorded", "answered", "needs_confirmation", "needs_clarification", "rejected"].contains(
             result.status),
           result.status != "recorded" || result.isPersisted,
+          result.status != "answered" || result.childID != nil,
           result.status != "needs_confirmation" || result.needsConfirmation,
           command.childID == nil || result.childID == nil || result.childID == command.childID
         else {

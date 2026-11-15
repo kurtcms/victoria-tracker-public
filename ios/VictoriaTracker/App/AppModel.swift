@@ -230,7 +230,11 @@ extension Backend: DashboardDataSource {}
     do {
       let response = try await Backend.shared.performCare(command)
       notice = response.message
-      await refresh()
+      if response.isAnswered {
+        carePending = (try? await Backend.shared.pendingCare()) ?? carePending
+      } else {
+        await refresh()
+      }
       return response
     } catch {
       self.error = error.localizedDescription

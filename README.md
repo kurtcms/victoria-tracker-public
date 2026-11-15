@@ -4,11 +4,13 @@
 
 A native iOS 17+ app built with SwiftUI, App Intents, Supabase and OpenAI structured extraction. Two parents share baby profiles, feedings, diapers, sleep, weights and milestones. The iOS app has no third-party package dependencies.
 
-The MVP is version **1.0, build 13**. It uses a short Siri conversation:
+Source release **v1.0.0** corresponds to iOS **1.0 (15)**. See the [changelog](CHANGELOG.md) for features and fixes and [release status](docs/RELEASE.md) for validation limits.
+
+It uses a short Siri conversation:
 
 > “Hey Siri, Victoria Tracker.” → “What’s up?” → “Victoria drank 180 mL.”
 
-Siri confirms only after the database confirms saving. English and an internet connection are required. Arbitrary descriptions cannot reliably be captured inside a single App Shortcut trigger; the supported interaction is two turns. [Siri behavior and examples](docs/SIRI.md)
+Siri confirms saving only after the database confirms persistence; questions return read-only answers. English, Cantonese and code-switching descriptions are implemented, with English app screens and an internet connection required. Cantonese Siri recognition depends on the phone’s Siri language; a bounded 50 mL recording passed on the tested phone. Spoken reply language was not separately confirmed. Arbitrary descriptions cannot reliably be captured inside a single App Shortcut trigger; the supported interaction is two turns. [Siri behavior and examples](docs/SIRI.md)
 
 ## Demo
 
@@ -18,7 +20,7 @@ Siri confirms only after the database confirms saving. English and an internet c
 
 [Watch the 45-second demo](https://github.com/user-attachments/assets/3daf4e10-2eb3-47ad-a6f9-5e00d1d11e1d) — Siri recording, daily care totals, WHO growth charts and milestones.
 
-Recorded on a physical iPhone using a showcase account with synthetic data.
+Recorded on a physical iPhone using a showcase account with synthetic data. This demo shows an earlier MVP; the [changelog](CHANGELOG.md) covers the newer voice queries and age guide.
 
 ## Built with Codex
 
@@ -46,7 +48,7 @@ python3 --version
 
 The backend commands below use CLI 3 syntax, verified with **3.1.0**. Other installation options: [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), [Deno](https://docs.deno.com/runtime/getting_started/installation/).
 
-**Using an existing configured backend?** Obtain its HTTPS URL, **public publishable key**, and an account/family invitation from the owner, then skip to step 3. Do not rerun setup or change an existing project’s Auth settings. No private key is needed to build the app.
+**Using an existing configured backend?** Obtain its HTTPS URL, **public publishable key**, and an account/family invitation from the owner, then skip to step 3. Build 14 requires the additive `202611140001_voice_care.sql` migration and updated `care-command` function; the owner should review/apply that upgrade first. Build 15 additionally needs `202611150001_care_queries.sql` and the matching function update; apply both to your own project before using these features. Do not rerun setup or change an existing project’s Auth settings. No private key is needed to build the app.
 
 ## 2. Set up a fresh Supabase backend
 
@@ -88,11 +90,13 @@ supabase functions deploy record-event --remote="$VT_PROJECT_REF" --use-api
 
 Replace `YOUR_PROJECT_REF` with the project reference from its dashboard. Interactive hosted commands ask for confirmation. All post-migration checks must pass. **Never run `supabase/tests/*.sql` on a hosted project.** Those are destructive fixtures for disposable local databases.
 
-The three committed migrations run in filename order. Preserve them unchanged after application; future schema changes need a new migration. `care-command` handles current app actions. `record-event` is retained for older pending entries and shared validation code. Both have **`verify_jwt=true`** and independently authenticate the signed-in user; do not deploy with verification disabled.
+The source has five migration files in filename order: the original three, `202611140001_voice_care.sql`, then `202611150001_care_queries.sql`. Apply all five to a fresh project, then treat them as immutable. Preserve them unchanged after application; future schema changes need a new migration. `care-command` handles current app actions. `record-event` is retained for older pending entries and shared validation code. Both have **`verify_jwt=true`** and independently authenticate the signed-in user; do not deploy with verification disabled.
 
 There is deliberately no OpenAI key yet. Account/family setup and manual recording work without OpenAI; natural-language recording will work after step 5.
 
 ## 3. Configure and install on your iPhone
+
+Before downloading WHO data, review [third-party notices](THIRD_PARTY_NOTICES.md) and the linked WHO terms. Numerical reference tables are downloaded locally and excluded from Git.
 
 ```sh
 python3 scripts/import_who_reference.py
@@ -100,7 +104,7 @@ cp ios/Config.local.xcconfig.example ios/Config.local.xcconfig
 open ios/VictoriaTracker.xcodeproj
 ```
 
-The first command downloads the official WHO reference tables locally. They are excluded from Git and governed by WHO’s terms; review [third-party notices](THIRD_PARTY_NOTICES.md). Then edit the ignored `ios/Config.local.xcconfig` locally:
+Edit the ignored `ios/Config.local.xcconfig` locally:
 
 ```xcconfig
 SUPABASE_URL = https:/$()/YOUR_PROJECT_REF.supabase.co
@@ -152,7 +156,7 @@ Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` (default **`gpt-4.1-mini`**).
 supabase secrets set --env-file supabase/.env.local --remote="$VT_PROJECT_REF"
 ```
 
-Supabase supplies `SUPABASE_URL` and normally `SUPABASE_ANON_KEY` to functions. The custom `VT_` variable avoids the reserved environment prefix. The runtime uses the public key and caller JWT; it never needs a service-role key. Manual actions and confirmations do not call OpenAI; text/Siri interpretation does.
+Supabase supplies `SUPABASE_URL` and normally `SUPABASE_ANON_KEY` to functions. The custom `VT_` variable avoids the reserved environment prefix. The runtime uses the public key and caller JWT; it never needs a service-role key. Manual actions and confirmations do not call OpenAI; natural-language interpretation does. Build 15 bypasses the model for a closed set of authenticated English care questions; the six common English query examples passed their authorized physical checks.
 
 ## 6. Verify Siri recording
 
@@ -164,6 +168,8 @@ Sign in and open the dashboard once. Enable Siri and any Victoria Tracker permis
 4. On the other parent’s phone, open the same child and pull to refresh. The same entry should appear once.
 
 Siri may display a confirmation silently according to its response settings. Enable **Always Show Request** and **Always Show Siri Captions** under Siri Responses to show speech; choose spoken responses if desired. With multiple babies, include the name; an omitted name asks for clarification. UI selection does not substitute for the spoken name.
+
+After the prompt you can describe one to five events for the same baby, ask about saved records or daily totals, or request a correction/deletion of the latest qualifying record. Every edit or deletion needs a separate confirmation. `mil` is accepted as mL; ounces are unsupported. In the Milestones **Age guide**, tap the title/check button to record today, or a checked item to review removal. **Choose an earlier date** remains available; source links sit in checkpoint descriptions. The [source notes](docs/MILESTONE_SOURCES.md) explain the checkpoint ages.
 
 Further examples and optional regression steps: [Siri](docs/SIRI.md), [acceptance checks](docs/ACCEPTANCE.md). A fresh Siri invocation is a separate recording. If a response is lost, use the original **Retry / check recording** entry instead of speaking the event again.
 
@@ -193,11 +199,11 @@ xcodebuild -project ios/VictoriaTracker.xcodeproj -scheme VictoriaTracker \
 
 Keep `DEVELOPER_DIR` exported as in step 1. Tests use mocks/synthetic fixtures, not live baby data. [Testing and built-artifact checks](docs/TESTING.md)
 
-The checked-in Xcode project is ready to open. After adding/removing sources/resources, regenerate it with `python3 scripts/generate_project.py`; existing bundle IDs, signing choices and versions are preserved. The app icon is included. Download WHO tables before building or regenerating the project; reference CSV files remain ignored. Asset scripts are under `scripts/`.
+The checked-in Xcode project is ready to open. After adding/removing sources/resources, regenerate it with `python3 scripts/generate_project.py`; existing bundle IDs, signing choices and versions are preserved. Bundled WHO tables and the app icon are already included; optional regeneration scripts are under `scripts/`.
 
 ```text
 ios/         SwiftUI app, App Intents, resources and Xcode project
-supabase/    Three immutable migrations, two Edge Functions, local tests
+supabase/    Five immutable migrations, two Edge Functions, local tests
 tests/       Swift and Python tests
 scripts/     Project/assets generation, security and database checks
 docs/        Architecture, API, security, Siri, testing and release status
@@ -205,8 +211,6 @@ docs/        Architecture, API, security, Siri, testing and release status
 
 Refreshes happen on activation, successful writes, pull-to-refresh and every ten seconds while active. Each phone uses its current timezone; travelling parents can see different day totals for shared UTC records. Recording is online, with recovery of uncertain requests rather than a general offline queue. Normal entry supports the preceding 366 days. WHO curves cover birth through five years; premature percentile interpretation is outside this MVP.
 
-See [architecture](docs/ARCHITECTURE.md), [API](docs/CARE_API.md), [security](docs/SECURITY_AUDIT.md) and [release status/known limits](docs/RELEASE.md). Six physical acceptance cases remain explicitly unverified; release notes distinguish them from passed automated and two-phone checks.
+See [setup](docs/SETUP.md), [architecture](docs/ARCHITECTURE.md), [API](docs/CARE_API.md), [security](docs/SECURITY_AUDIT.md) and [release status/known limits](docs/RELEASE.md). Build 15 is deployed and installed on both phones; the six earlier build 14 live cases retain their [recorded limits](docs/RELEASE.md). Build 15 milestone interactions and the six English query cases passed. Four older physical cases and the broader guide/manual-editor matrix remain unverified. The public source release uses a separately sanitized snapshot.
 
-## License
-
-Original code and artwork: [MIT](LICENSE). WHO reference tables are downloaded locally and are not included in this repository; their use is subject to separate [third-party terms and notices](THIRD_PARTY_NOTICES.md).
+Original code and artwork: [MIT](LICENSE). WHO reference tables are downloaded locally and are excluded from this repository; their use is governed by [third-party notices](THIRD_PARTY_NOTICES.md).

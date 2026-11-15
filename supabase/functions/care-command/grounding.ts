@@ -77,6 +77,41 @@ export function statedDates(text: string, referenceDate: string): string[] {
     add(match[2], match[1], match[3]);
   }
   for (const match of text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)) values.add(match[0]);
+  for (
+    const match of text.matchAll(
+      /(?:(\d{4})年)?([零〇一二兩两三四五六七八九十廿卅\d]{1,3})月([零〇一二兩两三四五六七八九十廿卅\d]{1,3})(?:日|號|号)/gu,
+    )
+  ) {
+    const number = (s: string): number => {
+      if (/^\d+$/.test(s)) return Number(s);
+      const digits: Record<string, number> = {
+        零: 0,
+        〇: 0,
+        一: 1,
+        二: 2,
+        兩: 2,
+        两: 2,
+        三: 3,
+        四: 4,
+        五: 5,
+        六: 6,
+        七: 7,
+        八: 8,
+        九: 9,
+      };
+      s = s.replace(/^廿/, "二十").replace(/^卅/, "三十");
+      if (s.includes("十")) {
+        const [a, b] = s.split("十");
+        return (a ? digits[a] : 1) * 10 + (b ? digits[b] : 0);
+      }
+      return digits[s] ?? NaN;
+    };
+    values.add(
+      `${match[1] ?? referenceDate.slice(0, 4)}-${String(number(match[2])).padStart(2, "0")}-${
+        String(number(match[3])).padStart(2, "0")
+      }`,
+    );
+  }
   return [...values];
 }
 export function dateIsGrounded(text: string, date: string, referenceDate: string): boolean {
@@ -86,6 +121,11 @@ export function dateIsGrounded(text: string, date: string, referenceDate: string
 const words = (text: string): string[] => text.normalize("NFC").toLocaleLowerCase("en").match(/[\p{L}\p{N}]+/gu) ?? [];
 export function phraseIsGrounded(text: string, phrase: unknown, title = false): boolean {
   if (typeof phrase !== "string") return false;
+  if (/\p{Script=Han}/u.test(phrase)) {
+    const compact = (value: string) => value.normalize("NFC").toLocaleLowerCase("en").replace(/[\p{P}\p{Z}\s]/gu, "");
+    const candidate = compact(phrase);
+    return candidate.length > 0 && compact(text).includes(candidate);
+  }
   const source = words(text), candidate = words(phrase);
   // The optional title label "First" may move from "for the first time".
   if (title && candidate[0] === "first") {

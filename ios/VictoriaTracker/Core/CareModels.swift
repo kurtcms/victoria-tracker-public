@@ -51,6 +51,7 @@ public struct Milestone: Codable, Identifiable, Equatable, Sendable {
   public let inputSource: String
   public let createdAt: Date
   public let revision: Int
+  public var guideID: String? = nil
   enum CodingKeys: String, CodingKey {
     case id, title, note, revision
     case childID = "child_id"
@@ -60,6 +61,7 @@ public struct Milestone: Codable, Identifiable, Equatable, Sendable {
     case recordedBy = "recorded_by"
     case inputSource = "input_source"
     case createdAt = "created_at"
+    case guideID = "guide_id"
   }
   public var dateLabel: String {
     guard let date = CalendarDate.parse(occurredOn) else { return occurredOn }
@@ -150,6 +152,7 @@ public enum CalendarDate {
   }
 }
 public struct CarePayload: Codable, Equatable, Sendable {
+  public var guideID: String?
   public var occurredAt: Date?
   public var endedAt: Date?
   public var eventType: String?
@@ -170,6 +173,7 @@ public struct CarePayload: Codable, Equatable, Sendable {
   public var void: Bool?
   public init() {}
   enum CodingKeys: String, CodingKey {
+    case guideID = "guide_id"
     case title, note, void
     case occurredAt = "occurred_at"
     case endedAt = "ended_at"
@@ -189,6 +193,7 @@ public struct CarePayload: Codable, Equatable, Sendable {
   }
   public func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encodeIfPresent(guideID, forKey: .guideID)
     try c.encodeIfPresent(occurredAt, forKey: .occurredAt)
     try c.encodeIfPresent(endedAt, forKey: .endedAt)
     try c.encodeIfPresent(eventType, forKey: .eventType)
@@ -265,6 +270,7 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
   public let payload: CarePayload?
   public let proposalID: UUID?
   public let confirmed: Bool?
+  public let language: String?
   public init(
     text: String, childID: UUID? = nil, source: String = "siri", referenceAt: Date = Date(),
     timeZone: TimeZone = .current, requestID: UUID = UUID()
@@ -282,6 +288,7 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
     payload = nil
     proposalID = nil
     confirmed = nil
+    language = nil
   }
   public init(
     action: String, childID: UUID, payload: CarePayload, referenceAt: Date = Date(),
@@ -300,9 +307,11 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
     self.payload = payload
     proposalID = nil
     confirmed = nil
+    language = nil
   }
   public init(
     proposalID: UUID, childID: UUID, confirmed: Bool, source: String = "manual",
+    language: String? = nil,
     referenceAt: Date = Date(), timeZone: TimeZone = .current, requestID: UUID = UUID()
   ) {
     self.requestID = requestID
@@ -318,9 +327,10 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
     payload = nil
     self.proposalID = proposalID
     self.confirmed = confirmed
+    self.language = language
   }
   enum CodingKeys: String, CodingKey {
-    case source, mode, text, action, payload, confirmed
+    case source, mode, text, action, payload, confirmed, language
     case requestID = "request_id"
     case referenceAt = "reference_at"
     case timeZone = "time_zone"
@@ -335,6 +345,7 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
       && a.zoneOffsets == b.zoneOffsets && a.source == b.source && a.mode == b.mode
       && a.childID == b.childID && a.text == b.text && a.action == b.action
       && a.payload == b.payload && a.proposalID == b.proposalID && a.confirmed == b.confirmed
+      && a.language == b.language
   }
 }
 public struct CareResponse: Codable, Identifiable, Sendable {
@@ -344,12 +355,24 @@ public struct CareResponse: Codable, Identifiable, Sendable {
   public let eventID: UUID?
   public let childID: UUID?
   public let proposalID: UUID?
-  public var isPersisted: Bool { status == "recorded" && eventID != nil && childID != nil }
+  public var eventIDs: [UUID]? = nil
+  public var language: String? = nil
+  public var isDeletion: Bool? = nil
+  public var isPersisted: Bool {
+    guard status == "recorded", childID != nil else { return false }
+    if let eventIDs {
+      return !eventIDs.isEmpty && eventIDs.count <= 5 && Set(eventIDs).count == eventIDs.count
+    }
+    return eventID != nil
+  }
+  public var isAnswered: Bool { status == "answered" }
   public var needsConfirmation: Bool {
     status == "needs_confirmation" && proposalID != nil && childID != nil
   }
   enum CodingKeys: String, CodingKey {
-    case status, message
+    case status, message, language
+    case eventIDs = "event_ids"
+    case isDeletion = "is_deletion"
     case eventID = "event_id"
     case childID = "child_id"
     case proposalID = "proposal_id"
@@ -359,6 +382,44 @@ public struct PendingCareCommand: Codable, Identifiable, Sendable {
   public let userID: UUID
   public let command: CareCommand
   public var id: UUID { command.id }
+}
+
+struct FeedingCorrectionDraft {
+  enum Mode: String, CaseIterable {
+    case total, leftover
+    var title: String {
+      self == .total ? "Change amount drunk" : "Subtract milk left in bottle"
+    }
+  }
+  let currentML: Double
+  let basisML: Double
+  private(set) var mode: Mode = .total
+  var input: String
+  init(currentML: Double, basisML: Double) {
+    self.currentML = currentML
+    self.basisML = basisML
+    input = currentML.formatted(.number.grouping(.never))
+  }
+  mutating func select(_ value: Mode) {
+    guard mode != value else { return }
+    mode = value
+    input = ""
+  }
+  var amountML: Double? {
+    let decimal = Locale.current.decimalSeparator ?? "."
+    guard !input.isEmpty, input.allSatisfy({ $0.isNumber || String($0) == decimal }),
+      input.components(separatedBy: decimal).count <= 2,
+      let value = Double(input.replacingOccurrences(of: decimal, with: ".")),
+      value.isFinite, value >= 0, value <= 2000,
+      abs(value * 100 - (value * 100).rounded()) < 1e-7,
+      mode == .total || (basisML.isFinite && basisML > value && basisML <= 2000)
+    else { return nil }
+    return value
+  }
+  var resultML: Double? {
+    guard let amountML else { return nil }
+    return mode == .leftover ? basisML - amountML : amountML
+  }
 }
 public struct RevisionValue: Codable, Sendable {
   public let volumeML: Double?

@@ -64,8 +64,8 @@ struct AuthView: View {
       Section {
         Image(systemName: "heart.circle.fill").font(.system(size: 56)).foregroundStyle(.pink).frame(
           maxWidth: .infinity)
-        Text("A little less to remember.").font(.title2.bold())
-        Text("Care, sleep, growth, and little firsts. Shared by both parents.").foregroundStyle(
+        Text("Parenting is hands-on. Tracking shouldn’t be.").font(.title2.bold())
+        Text("Say it. We’ll log it.").foregroundStyle(
           .secondary)
       }
       Section("Your account") {

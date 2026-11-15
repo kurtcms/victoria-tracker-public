@@ -1,5 +1,66 @@
 {
   "sourceLanguage": "en",
-  "strings": {},
+  "strings": {
+    "Record an event": {
+      "localizations": {
+        "zh-HK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "記錄寶寶照顧"
+          }
+        }
+      }
+    },
+    "Event": {
+      "localizations": {
+        "zh-HK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "照顧描述"
+          }
+        }
+      }
+    },
+    "What’s up?": {
+      "localizations": {
+        "zh-HK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "想記低啲咩，或者想問啲咩？"
+          }
+        }
+      }
+    },
+    "Tell Victoria Tracker": {
+      "localizations": {
+        "zh-HK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同 Victoria Tracker 講低"
+          }
+        }
+      }
+    },
+    "Record ${text}": {
+      "localizations": {
+        "zh-HK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "記錄 ${text}"
+          }
+        }
+      }
+    },
+    "Siri asks what’s up. Describe up to five care events for one baby, ask about their day, or correct or remove a record with confirmation. Include the baby’s name and units. You can describe care in English or Cantonese; recognition depends on Siri’s language and device support.": {
+      "localizations": {
+        "zh-HK": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siri 會問你想記低啲咩。你可以為一位寶寶一次記錄最多五件照顧事項、查詢當日記錄，或者要求更改或刪除記錄，再確認。請講寶寶嘅名同單位。你可以用英文或廣東話描述；語音識別視乎 Siri 語言設定同裝置支援。"
+          }
+        }
+      }
+    }
+  },
   "version": "1.0"
 }
