@@ -1,5 +1,5 @@
 -- READ ONLY: current post-migration catalog/privilege checks; no care rows inserted.
--- Run after all three migrations, including on an existing populated installation.
+-- Run after all migrations, including on an existing populated installation.
 with expected_tables(schema_name, relation_name) as (
   values ('public','families'),('public','family_members'),('public','children'),
     ('public','events'),('public','sleep_sessions'),('public','milestones'),
@@ -17,7 +17,7 @@ with expected_tables(schema_name, relation_name) as (
   select p.* from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where (n.nspname='public' and p.proname in
     ('create_family','create_family_v2','create_family_invite','join_family',
-     'consume_event_budget','record_event','save_child','execute_care_command'))
+     'consume_event_budget','record_event','save_child','execute_care_command','execute_care_conversation'))
     or (n.nspname='private' and p.proname='is_family_member')
 )
 select 'all_tables_present_with_rls' as check_name,count(*)=11 and bool_and(relrowsecurity) as ok from app_tables
@@ -38,16 +38,22 @@ union all
 select 'private_table_read_denied',not exists(
   select 1 from app_tables where schema_name='private' and has_table_privilege('authenticated',oid,'SELECT'))
 union all
-select 'security_definers_have_empty_search_path',count(*)=9 and bool_and(prosecdef and proconfig @> array['search_path=""']) from app_rpcs
+select 'security_definers_have_empty_search_path',count(*)=10 and bool_and(prosecdef and proconfig @> array['search_path=""']) from app_rpcs
 union all
 select 'anonymous_rpc_execute_denied',not exists(select 1 from app_rpcs where has_function_privilege('anon',oid,'EXECUTE'))
 union all
-select 'authenticated_rpc_execute_granted',count(*)=9 and bool_and(has_function_privilege('authenticated',oid,'EXECUTE')) from app_rpcs
+select 'authenticated_rpc_execute_granted',count(*)=10 and bool_and(has_function_privilege('authenticated',oid,'EXECUTE')) from app_rpcs
 union all
-select 'private_validators_not_client_callable',count(*)=2 and bool_and(
+select 'private_validators_not_client_callable',count(*)=5 and bool_and(
   not has_function_privilege('authenticated',p.oid,'EXECUTE') and not has_function_privilege('anon',p.oid,'EXECUTE'))
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where n.nspname='private' and p.proname in ('care_keys','care_time')
+where n.nspname='private' and p.proname in ('care_keys','care_time','care_label','care_local','care_present')
 union all
-select 'three_migrations_recorded',count(*)=3 from supabase_migrations.schema_migrations
-where version in ('202611120001','202611130001','202611130002');
+select 'five_migrations_recorded',count(*)=5 from supabase_migrations.schema_migrations
+where version in ('202611120001','202611130001','202611130002','202611140001','202611150001')
+union all
+select 'private_v14_rpc_secured',count(*)=1 and bool_and(p.prosecdef and p.proconfig @> array['search_path=""']
+  and not has_function_privilege('authenticated',p.oid,'EXECUTE')
+  and not has_function_privilege('anon',p.oid,'EXECUTE'))
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='private' and p.proname='execute_care_conversation_v14';

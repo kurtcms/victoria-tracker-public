@@ -3,21 +3,25 @@ import SwiftUI
 struct CareReviewView: View {
   @Bindable var model: AppModel
   let proposal: CareResponse
+  var isDeletion = false
   var completed: () -> Void = {}
   @Environment(\.dismiss) private var dismiss
   var body: some View {
     NavigationStack {
       Form {
-        Section("Review the change") {
+        Section {
           Text(proposal.message)
-          Text("Nothing changes until you confirm.").font(.footnote).foregroundStyle(.secondary)
         }
         Section {
-          Button("Confirm change") {
+          Button(
+            removesRecord ? "Remove record" : "Save change",
+            role: removesRecord ? .destructive : nil
+          ) {
             Task {
               guard let id = proposal.proposalID, let child = proposal.childID else { return }
               if let response = await model.care(
-                CareCommand(proposalID: id, childID: child, confirmed: true))
+                CareCommand(
+                  proposalID: id, childID: child, confirmed: true, language: proposal.language))
               {
                 if response.isPersisted {
                   completed()
@@ -31,16 +35,23 @@ struct CareReviewView: View {
           Button("Cancel", role: .cancel) {
             Task {
               if let id = proposal.proposalID, let child = proposal.childID {
-                _ = await model.care(CareCommand(proposalID: id, childID: child, confirmed: false))
+                _ = await model.care(
+                  CareCommand(
+                    proposalID: id, childID: child, confirmed: false, language: proposal.language))
               }
               dismiss()
             }
           }.disabled(model.busy)
         }
-        StatusMessages(model: model)
-      }.navigationTitle("Confirm correction").navigationBarTitleDisplayMode(.inline)
+        if let error = model.error {
+          Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+            .font(.callout).accessibilityIdentifier("errorMessage")
+        }
+      }.navigationTitle(removesRecord ? "Remove record?" : "Save change?")
+        .navigationBarTitleDisplayMode(.inline)
     }.interactiveDismissDisabled(model.busy)
   }
+  private var removesRecord: Bool { isDeletion || proposal.isDeletion == true }
 }
 
 struct EditCareView: View {
@@ -52,7 +63,9 @@ struct EditCareView: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.timeZone) private var timeZone
   @State private var amount = ""
-  @State private var leftover = false
+  @State private var feeding = FeedingCorrectionDraft(currentML: 0, basisML: 0)
+  @State private var configured = false
+  @State private var removing = false
   @State private var diaper: DiaperKind = .wet
   @State private var start = Date()
   @State private var end = Date()
@@ -78,14 +91,43 @@ struct EditCareView: View {
               )
             }
             if event.eventType == .feeding {
-              Picker("Correction", selection: $leftover) {
-                Text("Consumed total").tag(false)
-                Text("Left in bottle").tag(true)
+              ForEach(FeedingCorrectionDraft.Mode.allCases, id: \.self) { mode in
+                Button {
+                  feeding.select(mode)
+                } label: {
+                  Label(
+                    mode.title,
+                    systemImage: feeding.mode == mode ? "largecircle.fill.circle" : "circle"
+                  )
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                  .accessibilityAddTraits(feeding.mode == mode ? .isSelected : [])
               }
-              TextField(leftover ? "Leftover mL" : "Corrected mL", text: $amount).keyboardType(
-                .decimalPad)
-              Text("Review the before and after amounts before confirming.").font(.footnote)
-                .foregroundStyle(.secondary)
+              LabeledContent(
+                feeding.mode == .leftover ? "Milk left (mL)" : "Amount drunk (mL)"
+              ) {
+                TextField("mL", text: $feeding.input)
+                  .keyboardType(.decimalPad)
+                  .multilineTextAlignment(.trailing)
+              }
+              Text(
+                feeding.mode == .leftover
+                  ? "Subtract from the bottle amount of \(feeding.basisML.formatted()) mL, before any leftover corrections. Enter less than the full bottle; use Change amount drunk to enter zero."
+                  : "Enter the total actually drunk. Zero removes this feeding from totals."
+              )
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              if let result = feeding.resultML {
+                LabeledContent(
+                  "Amount drunk",
+                  value: "\(feeding.currentML.formatted()) → \(result.formatted()) mL"
+                )
+                .accessibilityIdentifier("feedingCorrectionPreview")
+              } else {
+                Text("Enter a valid amount to preview the change.").font(.footnote).foregroundStyle(
+                  .secondary)
+              }
             }
             if event.eventType == .weight {
               TextField("Corrected kg", text: $amount).keyboardType(.decimalPad)
@@ -131,7 +173,14 @@ struct EditCareView: View {
       }.navigationTitle("Correct a record").navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("Close") { dismiss() }.disabled(model.busy) }
         .onAppear {
+          guard !configured else { return }
+          configured = true
           if let event {
+            if event.eventType == .feeding {
+              feeding = FeedingCorrectionDraft(
+                currentML: event.volumeML ?? 0, basisML: event.feedingBasisML ?? event.volumeML ?? 0
+              )
+            }
             amount = String(event.eventType == .weight ? event.weightKG ?? 0 : event.volumeML ?? 0)
             start =
               event.eventType == .weight
@@ -152,14 +201,14 @@ struct EditCareView: View {
             precision = milestone.datePrecision
           }
         }
-        .sheet(item: $proposal) { p in CareReviewView(model: model, proposal: p) { dismiss() } }
+        .sheet(item: $proposal) { p in
+          CareReviewView(model: model, proposal: p, isDeletion: removing) { dismiss() }
+        }
     }.interactiveDismissDisabled(model.busy)
   }
   private var valid: Bool {
     if event?.eventType == .feeding {
-      return Double(
-        amount.replacingOccurrences(of: Locale.current.decimalSeparator ?? ".", with: ".")
-      ).map { $0.isFinite && $0 >= 0 && $0 <= 2000 } ?? false
+      return feeding.resultML != nil
     }
     if event?.eventType == .weight {
       return Double(
@@ -177,9 +226,9 @@ struct EditCareView: View {
       p.targetID = event.id
       if event.eventType == .feeding && !remove {
         action = "propose_feeding"
-        p.correctionKind = leftover ? "leftover" : "total"
-        p.amountML = Double(
-          amount.replacingOccurrences(of: Locale.current.decimalSeparator ?? ".", with: "."))
+        guard let amount = feeding.amountML else { return }
+        p.correctionKind = feeding.mode.rawValue
+        p.amountML = amount
       } else {
         p.targetType = "event"
         p.expectedRevision = event.revision ?? 1
@@ -219,6 +268,7 @@ struct EditCareView: View {
       p.occurredOn = precision == "month" ? String(value.prefix(7)) + "-01" : value
     }
     let command = CareCommand(action: action, childID: child.id, payload: p, timeZone: timeZone)
+    removing = remove || (event?.eventType == .feeding && feeding.resultML == 0)
     submitting = command
     if let r = await model.care(command) {
       submitting = nil

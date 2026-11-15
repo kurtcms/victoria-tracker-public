@@ -12,11 +12,26 @@ enum SiriRecorder {
   {
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 1000 else {
       throw TrackerError.message(
-        "Please describe one event, including the baby’s name, amount and unit or diaper type.")
+        "Describe care or ask a question. Include the baby’s name and any amounts with units.")
     }
     // No selected dashboard child is attached to Siri speech. The authenticated
     // backend resolves an explicit name and must ask when multiple babies exist.
     return try await backend.performCare(CareCommand(text: text))
+  }
+
+  static func confirm(
+    _ proposal: CareResponse, using backend: any SiriRecordingBackend = Backend.shared
+  )
+    async throws -> CareResponse
+  {
+    guard proposal.needsConfirmation, let id = proposal.proposalID, let child = proposal.childID
+    else {
+      throw TrackerError.message("There is no change to confirm.")
+    }
+    return try await backend.performCare(
+      CareCommand(
+        proposalID: id, childID: child, confirmed: true, source: "siri", language: proposal.language
+      ))
   }
 
   static func retiredPreset() throws -> IntentDialog {
@@ -31,7 +46,7 @@ enum SiriRecorder {
 struct LogEventIntent: AppIntent {
   static let title: LocalizedStringResource = "Record an event"
   static let description = IntentDescription(
-    "Siri asks what’s up. Describe care, sleep, growth, a milestone or feeding correction. Include the baby’s name when your family has more than one baby."
+    "Siri asks what’s up. Describe up to five care events for one baby, ask about their day, or correct or remove a record with confirmation. Include the baby’s name and units. You can describe care in English or Cantonese; recognition depends on Siri’s language and device support."
   )
   static let openAppWhenRun = false
   static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
@@ -46,18 +61,16 @@ struct LogEventIntent: AppIntent {
     if response.status == "needs_clarification" {
       throw $text.needsValueError(IntentDialog(stringLiteral: response.message))
     }
-    if response.needsConfirmation, let proposal = response.proposalID, let child = response.childID
-    {
+    if response.needsConfirmation {
       let dialog = IntentDialog(stringLiteral: response.message)
       if #available(iOS 18.0, *) {
         try await requestConfirmation(actionName: .continue, dialog: dialog)
       } else {
         try await requestConfirmation(result: .result(dialog: dialog))
       }
-      response = try await Backend.shared.performCare(
-        CareCommand(proposalID: proposal, childID: child, confirmed: true, source: "siri"))
+      response = try await SiriRecorder.confirm(response)
     }
-    guard response.status == "rejected" || response.isPersisted else {
+    guard response.status == "rejected" || response.isPersisted || response.isAnswered else {
       throw TrackerError.message(
         "The database did not confirm saving. Check the pending entry in the app.")
     }

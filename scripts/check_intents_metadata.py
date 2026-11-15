@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the *built* app includes invocable actions and an English Siri phrase archive."""
+"""Check the *built* app includes invocable actions and English and Cantonese Siri phrase archives."""
 from pathlib import Path
 import json
 import sys
@@ -25,6 +25,7 @@ assert all("${applicationName}" in phrase for phrase in phrases)
 if (metadata / "root.ssu.yaml").exists():
     corpus = (metadata / "root.ssu.yaml").read_text()
     assert "locale: en" in corpus and "training: []" not in corpus, "Missing English phrase training corpus"
-archive = app / "en.lproj/nlu.appintents"
-assert (archive / "nlu.lzfse").is_file() and (archive / "nlu.lzfse").stat().st_size > 0, "Siri phrase training did not produce an archive"
-print("PASS: one prompted shortcut, required event parameter, no fixed presets, and archived English Siri phrases")
+for locale in ("en", "zh-HK"):
+    archive = app / f"{locale}.lproj/nlu.appintents"
+    assert (archive / "nlu.lzfse").is_file() and (archive / "nlu.lzfse").stat().st_size > 0, f"Siri phrase training did not produce the {locale} archive"
+print("PASS: one prompted shortcut, required request, no fixed presets, and compiled English/Cantonese Siri phrases")

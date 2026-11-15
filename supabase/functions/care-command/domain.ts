@@ -25,6 +25,7 @@ export type RequestCommand = {
   payload?: Record<string, unknown>;
   proposal_id?: string;
   confirmed?: boolean;
+  language?: "en" | "yue";
 };
 export type Outcome = { status: "needs_clarification" | "rejected"; message: string; code?: string };
 export type Action = { child_id: string; action: string; payload: Record<string, unknown> };
@@ -114,12 +115,14 @@ export function parse(raw: unknown, now: Date): RequestCommand {
     "payload",
     "proposal_id",
     "confirmed",
+    "language",
   ], ["request_id", "reference_at", "time_zone", "utc_offset_seconds", "zone_offsets", "source", "mode"]);
   if (
     typeof c.request_id !== "string" || !uuid.test(c.request_id) || typeof c.time_zone !== "string" ||
     c.time_zone.length > 100 || !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,3}$/.test(c.time_zone) ||
     !["siri", "text", "manual"].includes(String(c.source))
   ) fail("Invalid command metadata.");
+  if (c.language !== undefined && !["en", "yue"].includes(String(c.language))) fail("Unsupported response language.");
   const r = timestamp(c.reference_at);
   if (r > now.getTime() + 300000 || r < now.getTime() - 366 * 86400000) fail("Check the recording time.");
   try {
@@ -162,7 +165,7 @@ export function parse(raw: unknown, now: Date): RequestCommand {
       "text",
     ], ["text"]);
     if (c.source === "manual" || typeof c.text !== "string" || !c.text.trim() || c.text.length > 1000) {
-      fail("Describe one event in at most 1,000 characters.");
+      fail("Describe care or ask a question in at most 1,000 characters.");
     }
   } else if (c.mode === "action") {
     keys(c, [
@@ -195,6 +198,7 @@ export function parse(raw: unknown, now: Date): RequestCommand {
       "child_id",
       "proposal_id",
       "confirmed",
+      "language",
     ], [
       "child_id",
       "proposal_id",
@@ -240,7 +244,11 @@ export function validateAction(action: string, raw: unknown, c: RequestCommand, 
     return { occurred_at, ended_at };
   }
   if (action === "milestone") {
-    keys(p, ["title", "note", "occurred_on", "date_precision", "is_first"], [
+    if (
+      p.guide_id !== undefined &&
+      (typeof p.guide_id !== "string" || !/^(cdc|rbr|cps)-[a-z0-9-]{1,76}$/.test(p.guide_id))
+    ) fail("Invalid milestone guide reference.");
+    keys(p, ["title", "note", "occurred_on", "date_precision", "is_first", "guide_id"], [
       "title",
       "occurred_on",
       "date_precision",

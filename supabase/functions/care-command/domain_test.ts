@@ -397,7 +397,7 @@ Deno.test("explicit English and ISO dates must agree with the interpreted observ
   equal(wrongAmount.status, "needs_clarification");
 });
 
-Deno.test("milestone wording preserves observed words and rejects model-invented titles or notes", () => {
+Deno.test("milestone wording preserves hello and rejects model-invented titles or notes", () => {
   const text = "Victoria first waved hello on Nov 1st";
   const base = extracted({
     action: "milestone",
@@ -416,7 +416,7 @@ Deno.test("milestone wording preserves observed words and rejects model-invented
   for (
     const patch of [
       { title: "First bicycle" },
-      { title: "First waved goodbye" },
+      { title: "First said goodbye" },
       { note: "She was excited and smiling" },
       { occurred_on: "2026-11-13" },
     ]

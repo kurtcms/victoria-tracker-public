@@ -7,6 +7,76 @@ import XCTest
 #endif
 
 final class CareTests: XCTestCase {
+  func testFeedingCorrectionUsesBottleBasisAndClearsInputWhenModeChanges() throws {
+    var draft = FeedingCorrectionDraft(currentML: 160, basisML: 180)
+    XCTAssertEqual(draft.resultML, 160)
+    draft.select(.leftover)
+    XCTAssertEqual(draft.input, "")
+    XCTAssertNil(draft.resultML)
+    draft.input = "30"
+    XCTAssertEqual(draft.resultML, 150)
+    XCTAssertEqual(draft.amountML, 30)
+    draft.select(.total)
+    XCTAssertNil(draft.resultML)
+    draft.input = "80"
+    XCTAssertEqual(draft.resultML, 80)
+  }
+  func testInvalidLeftoversCannotBecomeZeroOrAnExcessiveCorrection() {
+    var draft = FeedingCorrectionDraft(currentML: 160, basisML: 180)
+    draft.select(.leftover)
+    for input in ["", " ", "milk", "-20", "180", "181", "NaN", "10.001", "1e2"] {
+      draft.input = input
+      XCTAssertNil(draft.resultML, input)
+      XCTAssertNil(draft.amountML, input)
+    }
+    draft.input = "0"
+    XCTAssertEqual(draft.resultML, 180)
+    draft.select(.total)
+    draft.input = "0"
+    XCTAssertEqual(draft.resultML, 0)
+  }
+  func testConfirmationRetainsCantoneseAndReadAnswerIsSeparateFromSaving() throws {
+    let wire =
+      #"{"status":"answered","message":"今日飲咗180毫升。","language":"yue","child_id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}"#
+    let response = try APIJSON.decoder().decode(CareResponse.self, from: Data(wire.utf8))
+    XCTAssertTrue(response.isAnswered)
+    XCTAssertFalse(response.isPersisted)
+    let command = CareCommand(
+      proposalID: UUID(), childID: UUID(), confirmed: true, language: response.language)
+    let object =
+      try JSONSerialization.jsonObject(with: APIJSON.encoder().encode(command)) as! [String: Any]
+    XCTAssertEqual(object["language"] as? String, "yue")
+    XCTAssertEqual(
+      command,
+      try APIJSON.decoder().decode(CareCommand.self, from: APIJSON.encoder().encode(command)))
+  }
+  func testAtomicBatchReceiptConfirmsPersistenceWithoutASingleEventID() throws {
+    let wire =
+      #"{"status":"recorded","message":"Recorded 2 events.","event_ids":["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],"child_id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}"#
+    let response = try APIJSON.decoder().decode(CareResponse.self, from: Data(wire.utf8))
+    XCTAssertTrue(response.isPersisted)
+  }
+  func testReadAnswerAndIncompleteReceiptsNeverConfirmPersistence() throws {
+    for wire in [
+      #"{"status":"answered","message":"180 mL today.","child_id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}"#,
+      #"{"status":"recorded","message":"Saved","event_ids":[],"child_id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}"#,
+      #"{"status":"recorded","message":"Saved","event_ids":["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]}"#,
+      #"{"status":"recorded","message":"Saved","event_ids":["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],"child_id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"}"#,
+    ] {
+      let response = try APIJSON.decoder().decode(CareResponse.self, from: Data(wire.utf8))
+      XCTAssertFalse(response.isPersisted)
+    }
+  }
+  func testOldPendingConfirmationKeepsAbsentLanguageAndStableWireBody() throws {
+    let old =
+      #"{"request_id":"AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA","reference_at":"2026-11-14T10:00:00.000Z","time_zone":"America/Vancouver","utc_offset_seconds":-28800,"zone_offsets":[{"from":"2026-11-01T09:00:00.000Z","seconds":-28800}],"source":"manual","mode":"confirm","child_id":"BBBBBBBB-BBBB-4BBB-8BBB-BBBBBBBBBBBB","proposal_id":"CCCCCCCC-CCCC-4CCC-8CCC-CCCCCCCCCCCC","confirmed":true}"#
+    let command = try APIJSON.decoder().decode(CareCommand.self, from: Data(old.utf8))
+    let before = try JSONSerialization.jsonObject(with: Data(old.utf8)) as! NSDictionary
+    let after =
+      try JSONSerialization.jsonObject(with: APIJSON.encoder().encode(command)) as! NSDictionary
+    XCTAssertEqual(before, after)
+    XCTAssertNil(after["language"])
+  }
   private func date(_ value: String) -> Date { ISO8601DateFormatter().date(from: value)! }
   private func sleep(_ start: String, _ end: String?) throws -> SleepSession {
     let row: [String: Any] = [

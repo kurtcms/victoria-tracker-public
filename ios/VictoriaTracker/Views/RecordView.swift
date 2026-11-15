@@ -32,10 +32,11 @@ struct RecordView: View {
           }.pickerStyle(.segmented)
         }
         if mode == 0 {
-          Section("What happened?") {
-            TextField("\(child.name) drank 120 mL", text: $text, axis: .vertical).lineLimit(3...6)
+          Section("Describe care or ask a question") {
+            TextField("What would you like to record or ask?", text: $text, axis: .vertical)
+              .lineLimit(3...6)
             Text(
-              "Describe one event or correction. With multiple babies, include their name. Include units and an earlier time if needed."
+              "Describe up to five events for one baby, ask about their day, or request a correction. Include their name, units and any earlier time. English and Cantonese descriptions are supported."
             ).font(.footnote).foregroundStyle(.secondary)
             Text(
               "Descriptions are sent to Supabase and OpenAI for interpretation. Records are shared with your family."
@@ -92,12 +93,14 @@ struct RecordView: View {
               "This attempt is pending. Close this form and use Retry / check recording on the Day screen before recording again."
             ).font(.footnote)
           } else {
-            Button("Save event") { Task { await save() } }.disabled(model.busy || !valid)
+            Button(mode == 0 ? "Send description" : "Save event") { Task { await save() } }
+              .disabled(model.busy || !valid)
           }
-          if model.busy { ProgressView("Recording…") }
+          if model.busy { ProgressView(mode == 0 ? "Sending…" : "Recording…") }
         }
         StatusMessages(model: model)
-      }.navigationTitle("Record for \(child.name)").navigationBarTitleDisplayMode(.inline)
+      }.navigationTitle(mode == 0 ? "Talk about \(child.name)" : "Record for \(child.name)")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("Close") { dismiss() }.disabled(model.busy) }
         .onAppear {
           if !configured {

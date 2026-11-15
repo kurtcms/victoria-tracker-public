@@ -104,12 +104,43 @@
       try await capture(
         "milestone-age-dark", MilestonesView(model: model).preferredColorScheme(.dark))
       if let child = model.child {
+        try await capture("milestone-guide", MilestoneGuideView(model: model, child: child))
+        try await capture(
+          "milestone-guide-accessibility",
+          MilestoneGuideView(model: model, child: child).environment(
+            \.dynamicTypeSize, .accessibility3))
+        let day = LocalDay(reference: Date(), timeZone: TimeZone.current)
+        let events = try await source.events(child: child, day: day)
+        let feeding = try XCTUnwrap(events.first)
+        try await capture(
+          "feeding-correction", EditCareView(model: model, child: child, event: feeding),
+          navigation: false)
+        try await capture(
+          "feeding-correction-accessibility",
+          EditCareView(model: model, child: child, event: feeding).environment(
+            \.dynamicTypeSize, .accessibility3), navigation: false)
+        let proposal = CareResponse(
+          status: "needs_confirmation",
+          message: "Change Victoria’s feeding today at 12:00 PM from 180 to 160 mL?", eventID: nil,
+          childID: child.id, proposalID: UUID())
+        try await capture(
+          "feeding-confirmation", CareReviewView(model: model, proposal: proposal),
+          navigation: false)
+        let removal = CareResponse(
+          status: "needs_confirmation", message: "Remove Victoria’s wet diaper today at 11:00 AM?",
+          eventID: nil, childID: child.id, proposalID: UUID(), isDeletion: true)
+        try await capture(
+          "record-removal-confirmation", CareReviewView(model: model, proposal: removal),
+          navigation: false)
         try await capture(
           "profile-controls", ChildProfileView(model: model, existing: child), navigation: false)
         try await capture(
           "manual-weight", RecordView(model: model, child: child, initialKind: "weight"),
           navigation: false)
+        try await capture(
+          "text-care-or-question", RecordView(model: model, child: child), navigation: false)
       }
+      try await capture("welcome", AuthView(model: model), navigation: false)
       try await capture("siri-help", SiriHelpView(), navigation: false)
       try await capture(
         "siri-help-dark", SiriHelpView().preferredColorScheme(.dark), navigation: false)

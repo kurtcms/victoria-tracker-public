@@ -69,6 +69,7 @@ public struct BabyEvent: Codable, Identifiable, Equatable, Sendable {
   public let requestID: UUID
   public var revision: Int? = nil
   public var measurementDate: String? = nil
+  public var feedingBasisML: Double? = nil
   public var detail: String {
     switch eventType {
     case .feeding:
@@ -91,6 +92,7 @@ public struct BabyEvent: Codable, Identifiable, Equatable, Sendable {
     case requestID = "request_id"
     case revision
     case measurementDate = "measurement_date"
+    case feedingBasisML = "feeding_basis_ml"
   }
 }
 public struct EventPayload: Codable, Equatable, Sendable {

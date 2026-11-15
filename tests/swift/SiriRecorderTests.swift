@@ -45,6 +45,35 @@
       XCTAssertFalse(result.isPersisted)
       XCTAssertFalse(result.needsConfirmation)
     }
+    func testCantoneseConfirmationForwardsServerLanguageAndExactProposal() async throws {
+      let backend = SiriTestBackend()
+      let id = UUID()
+      let child = UUID()
+      let proposal = CareResponse(
+        status: "needs_confirmation", message: "改做80毫升？", eventID: nil,
+        childID: child, proposalID: id, language: "yue")
+      _ = try await SiriRecorder.confirm(proposal, using: backend)
+      let commands = await backend.submitted()
+      XCTAssertEqual(commands.count, 1)
+      XCTAssertEqual(commands.first?.proposalID, id)
+      XCTAssertEqual(commands.first?.childID, child)
+      XCTAssertEqual(commands.first?.language, "yue")
+      XCTAssertEqual(commands.first?.source, "siri")
+      XCTAssertEqual(commands.first?.confirmed, true)
+      XCTAssertNil(commands.first?.text)
+    }
+    func testInvalidProposalNeverSendsConfirmation() async {
+      let backend = SiriTestBackend()
+      let result = CareResponse(
+        status: "answered", message: "180 mL today", eventID: nil,
+        childID: UUID(), proposalID: nil)
+      do {
+        _ = try await SiriRecorder.confirm(result, using: backend)
+        XCTFail("An answer must never become a confirmation")
+      } catch {}
+      let commands = await backend.submitted()
+      XCTAssertTrue(commands.isEmpty)
+    }
     func testLegacyFixedActionsAreHiddenAndFailWithoutRecording() async {
       XCTAssertFalse(Log160MilkIntent.isDiscoverable)
       XCTAssertFalse(LogWetDiaperIntent.isDiscoverable)

@@ -119,3 +119,39 @@ Deno.test("mL abbreviations and spoken letters preserve milk and leftover quanti
     equal(quantities(text, "ml"), []);
   }
 });
+
+Deno.test("mil and Cantonese quantities preserve exact amounts without matching milk or million", () => {
+  for (
+    const [text, unit, value] of [
+      ["Victoria drank twenty mil.", "ml", 20],
+      ["Victoria飲咗一百八十毫升奶", "ml", 180],
+      ["Victoria飲咗180毫升奶", "ml", 180],
+      ["Victoria飲咗兩百零五ml", "ml", 205],
+      ["Victoria重七點五公斤", "kg", 7.5],
+      ["Victoria飲咗廿五毫升", "ml", 25],
+      ["Victoria飲咗30mil", "ml", 30],
+    ] as const
+  ) equal(quantities(text, unit), [value]);
+  for (const text of ["180 milk", "180 million", "180 military", "負二十毫升", "-20毫升", "二十十毫升"]) {
+    equal(quantities(text, "ml"), []);
+  }
+  for (
+    const [text, value] of [["一百八十", 180], ["兩百零五", 205], ["零點五", 0.5], ["廿五", 25], [
+      "一八零",
+      180,
+    ]] as const
+  ) {
+    equal(spokenNumber(text), value);
+  }
+  equal(spokenNumber("二十十"), undefined);
+  assert(describesLeftover("Victoria支奶剩返二十毫升"));
+  assert(describesLeftover("Victoria支奶仲有20mil未飲完"));
+  assert(!describesLeftover("Victoria飲咗180毫升奶"));
+});
+
+Deno.test("ambiguous Cantonese shortened numbers clarify instead of asserting a different amount", () => {
+  for (const value of ["一百八", "兩百五", "一千二百八"]) equal(spokenNumber(value), undefined);
+  equal(spokenNumber("一百八十"), 180);
+  equal(spokenNumber("一百零八"), 108);
+  equal(quantities("Victoria飲咗１８０毫升", "ml"), [180]);
+});

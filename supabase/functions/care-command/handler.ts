@@ -1,15 +1,15 @@
 import {
   APIError,
   Baby,
-  interpret,
   interpretationUnavailableMessage,
   object,
   parse,
-  prompt,
-  schema,
+  phoneDate,
   uuid,
   validateAction,
 } from "./domain.ts";
+import { conversationPrompt, conversationSchema, interpretConversation, knownCareQuery } from "./conversation.ts";
+import { detectLanguage, localizeResponse } from "./language.ts";
 // Do not log request text, family data, provider output or credentials.
 type Config = { supabaseURL: string; supabaseKey: string; openAIKey: string; model: string };
 type Dependencies = { fetch: typeof fetch; now: () => Date };
@@ -82,6 +82,9 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
       if (typeof user.id !== "string" || !uuid.test(user.id)) throw new APIError(401, "unauthorized", "Sign in again.");
       if (user.is_anonymous === true) throw new APIError(403, "anonymous_user", "Use your parent account.");
       const command = parse(await body(req), deps.now());
+      const language = command.language ?? detectLanguage(command.text ?? "");
+      const resultJSON = (value: Record<string, unknown>, status = 200) =>
+        json(localizeResponse(value, language), status);
       const requestHash = await hash(command);
       const rest = (path: string, data?: unknown) =>
         deps.fetch(config.supabaseURL + "/rest/v1/" + path, {
@@ -108,7 +111,7 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
           throw new APIError(409, "idempotency_conflict", "This identifier belongs to a different command.");
         }
         const replay = object(receipts[0].response);
-        return json({
+        return resultJSON({
           ...replay,
           replayed: true,
           ...(replay.status === "recorded"
@@ -132,7 +135,7 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
         if (page.length < 500) break;
       }
       if (!babies.length) {
-        return json({
+        return resultJSON({
           status: "rejected",
           message: "Open Victoria Tracker and add or join your family’s baby profile first.",
         });
@@ -140,17 +143,26 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
       if (command.child_id && !babies.some((b) => b.id === command.child_id)) {
         throw new APIError(404, "child_unavailable", "That baby is not available in your family.");
       }
-      let action: string;
+      const directQuery = command.mode === "text" ? knownCareQuery(babies, command, deps.now()) : undefined;
+      let operation: string;
       let payload: Record<string, unknown>;
       let childID: string;
       if (command.mode === "confirm") {
-        action = command.confirmed ? "confirm" : "cancel";
-        payload = { proposal_id: command.proposal_id };
+        operation = "action";
+        payload = { action: command.confirmed ? "confirm" : "cancel", payload: { proposal_id: command.proposal_id } };
         childID = command.child_id!;
       } else if (command.mode === "action") {
-        action = command.action!;
-        payload = validateAction(action, command.payload, command, deps.now());
+        operation = "action";
+        payload = {
+          action: command.action!,
+          payload: validateAction(command.action!, command.payload, command, deps.now()),
+        };
         childID = command.child_id!;
+      } else if (directQuery) {
+        if ("status" in directQuery) return resultJSON(directQuery);
+        operation = directQuery.operation;
+        payload = directQuery.payload;
+        childID = directQuery.child_id;
       } else {
         const budget = await rest("rpc/consume_event_budget", {});
         if (!budget.ok) throw new APIError(503, "database_unavailable", "Recording is temporarily unavailable.");
@@ -165,14 +177,24 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
           const r = await deps.fetch("https://api.openai.com/v1/responses", {
             method: "POST",
             redirect: "error",
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(20000),
             headers: { Authorization: "Bearer " + config.openAIKey, "Content-Type": "application/json" },
             body: JSON.stringify({
               model: config.model || "gpt-4.1-mini",
               store: false,
-              max_output_tokens: 1200,
-              input: [{ role: "system", content: prompt(babies, command) }, { role: "user", content: command.text }],
-              text: { format: { type: "json_schema", name: "baby_care_action", strict: true, schema } },
+              max_output_tokens: 4500,
+              input: [{ role: "system", content: conversationPrompt(babies, command) }, {
+                role: "user",
+                content: command.text,
+              }],
+              text: {
+                format: {
+                  type: "json_schema",
+                  name: "baby_care_conversation",
+                  strict: true,
+                  schema: conversationSchema,
+                },
+              },
             }),
           });
           if (!r.ok) return unavailable();
@@ -183,20 +205,20 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
             return o.content.map(object);
           });
           if (parts.some((p) => p.type === "refusal")) {
-            return json({
+            return resultJSON({
               status: "rejected",
               message: "Nothing was recorded. Please describe one baby-care event or correction.",
             });
           }
           const text = parts.filter((p) => p.type === "output_text");
           if (text.length !== 1 || typeof text[0].text !== "string") return unavailable();
-          result = interpret(JSON.parse(text[0].text), babies, command, deps.now());
+          result = interpretConversation(JSON.parse(text[0].text), babies, command, deps.now());
         } catch (e) {
           if (
             e instanceof APIError &&
             ["invalid_action", "future_event", "invalid_event", "invalid_time"].includes(e.code)
           ) {
-            return json({
+            return resultJSON({
               status: e.code === "future_event" ? "rejected" : "needs_clarification",
               code: e.code,
               message: e.message,
@@ -204,19 +226,24 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
           }
           return unavailable();
         }
-        if ("status" in result) return json(result);
-        action = result.action;
+        if ("status" in result) return resultJSON(result);
+        operation = result.operation;
         payload = result.payload;
         childID = result.child_id;
       }
-      const r = await rest("rpc/execute_care_command", {
+      const r = await rest("rpc/execute_care_conversation", {
         p_child_id: childID,
         p_request_id: command.request_id,
         p_request_hash: requestHash,
-        p_action: action,
+        p_operation: operation,
+        p_language: language,
         p_reference_at: command.reference_at,
         p_source: command.source,
-        p_payload: payload,
+        // Milk-only questions reuse the authorized daily totals calculation.
+        // Limit the spoken answer after the database returns those facts.
+        p_payload: operation === "query" && payload.kind === "milk_total"
+          ? { ...payload, kind: "day_summary" }
+          : payload,
         p_time_zone: command.time_zone,
         p_utc_offset_seconds: command.utc_offset_seconds,
         p_zone_offsets: command.zone_offsets,
@@ -235,7 +262,7 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
             throw new APIError(404, "child_unavailable", "That record or confirmation is not accessible.");
           }
           if (["22023", "40001", "23514", "22P02", "22007", "22008", "22003"].includes(String(err.code))) {
-            return json({
+            return resultJSON({
               status: "rejected",
               message: err.code === "22023" || err.code === "40001"
                 ? String(err.message).slice(0, 400)
@@ -252,12 +279,30 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
       const result = object(await r.json());
       if (
         typeof result.message !== "string" ||
-        !["recorded", "needs_confirmation", "needs_clarification", "rejected"].includes(String(result.status)) ||
+        !["recorded", "answered", "needs_confirmation", "needs_clarification", "rejected"].includes(
+          String(result.status),
+        ) ||
         result.status === "recorded" && (typeof result.event_id !== "string" || !uuid.test(result.event_id)) ||
+        result.status === "recorded" && result.event_ids !== undefined &&
+          (!Array.isArray(result.event_ids) || result.event_ids.length < 1 || result.event_ids.length > 5 ||
+            new Set(result.event_ids).size !== result.event_ids.length || result.event_ids.some((id) =>
+              typeof id !== "string" || !uuid.test(id)
+            )) ||
+        ["recorded", "answered", "needs_confirmation"].includes(String(result.status)) &&
+          (typeof result.child_id !== "string" || result.child_id !== childID) ||
         result.status === "needs_confirmation" &&
           (typeof result.proposal_id !== "string" || !uuid.test(result.proposal_id))
       ) throw Error("Unconfirmed result");
-      return json(result);
+      if (operation === "query" && payload.kind === "milk_total" && result.status === "answered") {
+        const facts = object(result.details);
+        if (facts.query_kind !== "day_summary") throw Error("Unexpected query facts");
+        result.details = {
+          ...facts,
+          query_kind: "milk_total",
+          is_today: facts.day === phoneDate(command.reference_at, command),
+        };
+      }
+      return resultJSON(result);
     } catch (e) {
       if (e instanceof APIError) return json({ code: e.code, message: e.message }, e.status);
       return json({

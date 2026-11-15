@@ -461,11 +461,12 @@ struct SiriHelpView: View {
   var body: some View {
     NavigationStack {
       List {
-        Section("How to record") {
+        Section("Talk to your tracker") {
           Text("1. Say “Hey Siri, Victoria Tracker.”")
           Text(
             "2. When Siri asks “What’s up?”, describe what happened and include your baby’s name.")
-          Text("3. Wait for Siri to confirm it was saved.")
+          Text(
+            "3. Listen for the answer or saving confirmation. Review any change before confirming.")
         }
         Section {
           DisclosureGroup("Example things to say") {
@@ -475,7 +476,19 @@ struct SiriHelpView: View {
             Text("Victoria woke up.")
             Text("Victoria weighed 7.365 kg on August 21.")
             Text("Victoria first waved hello on November 1.")
+            Text("Victoria drank 120 mL and had a wet diaper.")
+            Text("How much milk has Victoria had today?")
+            Text("Change Victoria’s last feeding from 30 to 80 mL.")
+            Text("Remove Victoria’s last wet diaper.")
           }
+        }
+        Section("English or Cantonese") {
+          Text("Victoria 飲咗一百二十毫升奶。")
+          Text("Victoria 今日飲咗幾多奶？")
+          Text(
+            "Siri recognition depends on its language setting and your device. You can also type a description in the app."
+          )
+          .font(.footnote).foregroundStyle(.secondary)
         }
         Section("Not sure it saved?") {
           Text(
