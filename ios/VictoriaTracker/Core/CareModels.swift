@@ -30,10 +30,16 @@ public struct SleepSession: Codable, Identifiable, Equatable, Sendable {
 }
 public struct SleepDaySummary: Equatable, Sendable {
   public let total: TimeInterval
+  public let completedTotal: TimeInterval
+  public let openElapsed: TimeInterval
   public let sessionCount: Int
   public let includesOngoing: Bool
   public init(sessions: [SleepSession], day: LocalDay, asOf now: Date = Date()) {
     let relevant = sessions.filter { $0.overlap(with: day, asOf: now) > 0 }
+    completedTotal = relevant.filter { $0.endedAt != nil && $0.endedAt! <= now }
+      .reduce(0) { $0 + $1.overlap(with: day, asOf: now) }
+    openElapsed = relevant.filter { $0.endedAt == nil || $0.endedAt! > now }
+      .reduce(0) { $0 + $1.overlap(with: day, asOf: now) }
     total = relevant.reduce(0) { $0 + $1.overlap(with: day, asOf: now) }
     sessionCount = relevant.count
     includesOngoing = relevant.contains { $0.endedAt == nil }
@@ -255,6 +261,68 @@ public struct PhoneZoneOffset: Codable, Equatable, Sendable {
     return values
   }
 }
+public struct CareQueryContext: Codable, Equatable, Sendable {
+  public enum Domain: String, Codable, Sendable {
+    case feeding, diaper, sleep, weight, milestone, care
+  }
+  public let childID: UUID
+  public let domain: Domain
+  public let recordID: UUID?
+  public let at: Date
+  public init(childID: UUID, domain: Domain, recordID: UUID? = nil, at: Date) {
+    self.childID = childID
+    self.domain = domain
+    self.recordID = recordID
+    self.at = at
+  }
+  enum CodingKeys: String, CodingKey {
+    case domain, at
+    case childID = "child_id"
+    case recordID = "record_id"
+  }
+  public static func == (a: Self, b: Self) -> Bool {
+    a.childID == b.childID && a.domain == b.domain && a.recordID == b.recordID
+      && APIJSON.string(a.at) == APIJSON.string(b.at)
+  }
+}
+public struct CareQueryPresentation: Codable, Equatable, Sendable {
+  public enum Milk: String, Codable, Sendable { case ml, oz }
+  public enum Weight: String, Codable, Sendable { case kg, lb }
+  public enum Surface: String, Codable, Sendable { case spoken, visual }
+  public let milk: Milk
+  public let weight: Weight
+  public let surface: Surface
+  public init(milk: Milk = .ml, weight: Weight = .kg, surface: Surface) {
+    self.milk = milk
+    self.weight = weight
+    self.surface = surface
+  }
+}
+// Ephemeral read context; never grants mutation authority or changes a queued request.
+struct CareQueryMemory {
+  private var userID: UUID?
+  private var value: CareQueryContext?
+  mutating func clear() {
+    userID = nil
+    value = nil
+  }
+  func context(userID: UUID, at: Date) -> CareQueryContext? {
+    guard self.userID == userID, let value,
+      (0...600).contains(at.timeIntervalSince(value.at))
+    else { return nil }
+    return value
+  }
+  mutating func receive(_ response: CareResponse, userID: UUID) {
+    guard response.isAnswered, let context = response.queryContext,
+      context.childID == response.childID
+    else {
+      clear()
+      return
+    }
+    self.userID = userID
+    value = context
+  }
+}
 public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
   public let requestID: UUID
   public var id: UUID { requestID }
@@ -271,6 +339,8 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
   public let proposalID: UUID?
   public let confirmed: Bool?
   public let language: String?
+  public private(set) var queryContext: CareQueryContext? = nil
+  public private(set) var presentation: CareQueryPresentation? = nil
   public init(
     text: String, childID: UUID? = nil, source: String = "siri", referenceAt: Date = Date(),
     timeZone: TimeZone = .current, requestID: UUID = UUID()
@@ -330,7 +400,8 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
     self.language = language
   }
   enum CodingKeys: String, CodingKey {
-    case source, mode, text, action, payload, confirmed, language
+    case source, mode, text, action, payload, confirmed, language, presentation
+    case queryContext = "query_context"
     case requestID = "request_id"
     case referenceAt = "reference_at"
     case timeZone = "time_zone"
@@ -339,13 +410,23 @@ public struct CareCommand: Codable, Equatable, Identifiable, Sendable {
     case utcOffsetSeconds = "utc_offset_seconds"
     case zoneOffsets = "zone_offsets"
   }
+  public func attaching(queryContext: CareQueryContext?, presentation: CareQueryPresentation?)
+    -> Self
+  {
+    guard mode == "text", source != "manual" else { return self }
+    var copy = self
+    copy.queryContext = queryContext
+    copy.presentation = presentation
+    return copy
+  }
   public static func == (a: Self, b: Self) -> Bool {
     a.requestID == b.requestID && APIJSON.string(a.referenceAt) == APIJSON.string(b.referenceAt)
       && a.timeZone == b.timeZone && a.utcOffsetSeconds == b.utcOffsetSeconds
       && a.zoneOffsets == b.zoneOffsets && a.source == b.source && a.mode == b.mode
       && a.childID == b.childID && a.text == b.text && a.action == b.action
       && a.payload == b.payload && a.proposalID == b.proposalID && a.confirmed == b.confirmed
-      && a.language == b.language
+      && a.language == b.language && a.queryContext == b.queryContext
+      && a.presentation == b.presentation
   }
 }
 public struct CareResponse: Codable, Identifiable, Sendable {
@@ -358,6 +439,7 @@ public struct CareResponse: Codable, Identifiable, Sendable {
   public var eventIDs: [UUID]? = nil
   public var language: String? = nil
   public var isDeletion: Bool? = nil
+  public var queryContext: CareQueryContext? = nil
   public var isPersisted: Bool {
     guard status == "recorded", childID != nil else { return false }
     if let eventIDs {
@@ -371,6 +453,7 @@ public struct CareResponse: Codable, Identifiable, Sendable {
   }
   enum CodingKeys: String, CodingKey {
     case status, message, language
+    case queryContext = "query_context"
     case eventIDs = "event_ids"
     case isDeletion = "is_deletion"
     case eventID = "event_id"

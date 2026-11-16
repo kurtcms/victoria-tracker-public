@@ -55,6 +55,7 @@ try:
     sql((root / "supabase/tests/expanded.sql").read_text())
     sql((root / "supabase/tests/conversation.sql").read_text())
     sql((root / "supabase/tests/care_queries.sql").read_text())
+    sql((root / "supabase/tests/read_snapshot.sql").read_text())
     # A migration is a one-time operation. An accidental repeat must roll back,
     # leaving all original objects and rows intact, not partially reconfigure access.
     repeat = subprocess.run(["docker", "exec", "-i", name, "psql", "-h", "127.0.0.1", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-U", "postgres"],

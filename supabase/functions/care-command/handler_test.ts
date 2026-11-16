@@ -61,6 +61,7 @@ function setup(
     providerFailure?: boolean;
     rpcStatus?: number;
     rpcBody?: unknown;
+    snapshot?: unknown;
     refusal?: boolean;
     expectedText?: string;
   } = {},
@@ -106,6 +107,13 @@ function setup(
           }],
         }],
       });
+    }
+    if (url.endsWith("read_care_snapshot")) {
+      saved = JSON.parse(String(init?.body));
+      return reply(
+        options.snapshot ?? { complete: true, events: [], sleep: [], milestones: [] },
+        options.rpcStatus ?? 200,
+      );
     }
     if (url.endsWith("execute_care_conversation")) {
       saved = JSON.parse(String(init?.body));
@@ -410,8 +418,9 @@ Deno.test("dashboard questions return database answers without claiming a persis
   const result = await response.json();
   equal(result.status, "answered");
   assert(!("event_id" in result));
-  equal(s.saved()?.p_operation, "query");
-  equal(s.calls.filter((c) => c.endsWith("execute_care_conversation")).length, 1);
+  equal(s.saved()?.p_child_id, child);
+  equal(s.calls.filter((c) => c.endsWith("read_care_snapshot")).length, 1);
+  assert(!s.calls.some((c) => c.endsWith("execute_care_conversation")));
 });
 Deno.test("confirmation language is validated and forwarded without paid extraction", async () => {
   const body = {
@@ -548,8 +557,8 @@ Deno.test("common dashboard questions bypass model interpretation and remain aut
     });
     const r = await s.handler(request({ ...command, text }));
     equal((await r.json()).status, "answered");
-    equal(s.saved()?.p_operation, "query");
-    equal((s.saved()?.p_payload as Record<string, unknown>).kind, kind);
+    equal(s.saved()?.p_child_id, child);
+    assert(!s.calls.some((c) => c.endsWith("execute_care_conversation")));
     assert(!s.calls.some((c) => c.includes("openai") || c.endsWith("consume_event_budget")));
     assert(s.calls.some((c) => c.endsWith("/auth/v1/user")));
   }
@@ -560,6 +569,12 @@ Deno.test("milk-only question returns only the stored milk total without trailin
   const s = setup({
     expectedText: text,
     providerFailure: true,
+    snapshot: {
+      complete: true,
+      events: [{ id: event, event_type: "feeding", volume_ml: 150, occurred_at: "2026-11-13T18:00:00Z" }],
+      sleep: [],
+      milestones: [],
+    },
     rpcBody: {
       status: "answered",
       child_id: child,
@@ -579,9 +594,10 @@ Deno.test("milk-only question returns only the stored milk total without trailin
   });
   const result = await (await s.handler(request({ ...command, text }))).json();
   equal(result.status, "answered");
-  equal(result.message, "Victoria has drunk 150 millilitres today.");
-  equal(result.details.query_kind, "milk_total");
-  equal(s.saved()?.p_operation, "query");
-  equal((s.saved()?.p_payload as Record<string, unknown>).kind, "day_summary");
+  equal(result.message, "150 millilitres across 1 recorded feed.");
+  equal(result.details.query.domain, "feeding");
+  equal(result.details.value, 150);
+  equal(s.saved()?.p_child_id, child);
+  assert(!s.calls.some((c) => c.endsWith("execute_care_conversation")));
   assert(!s.calls.some((c) => c.includes("openai")));
 });

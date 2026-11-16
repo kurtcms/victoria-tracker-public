@@ -10,6 +10,7 @@ import {
 } from "./domain.ts";
 import { amountIsGrounded, describesLeftover, quantities, quantityMentions, spokenNumber } from "./quantities.ts";
 import { dateIsGrounded, phraseIsGrounded, statedDates } from "./grounding.ts";
+import { interpretReadQuery, readQuerySchema } from "./query_interpret.ts";
 import { detectLanguage } from "./language.ts";
 
 export type Conversation = {
@@ -133,7 +134,9 @@ export const conversationSchema = strictObject({
         selector: operation === "correct" ? { ...selectorSchema, type: "object" } : { type: "null" },
         changes: operation === "correct" ? { ...changesSchema, type: "object" } : { type: "null" },
         remove: operation === "correct" ? { type: "boolean" } : { type: "null" },
-        query: operation === "query" ? { ...conversationProperties.query, type: "object" } : { type: "null" },
+        query: operation === "query"
+          ? { type: "object", anyOf: [{ ...conversationProperties.query, type: "object" }, readQuerySchema] }
+          : { type: "null" },
       })
     ),
   },
@@ -153,7 +156,7 @@ Times: an event cannot be after the reference even by seconds. No reported time 
 Milestones copy a short contiguous observed phrase verbatim into title, preserving words such as waved hello or 第一次識得坐. Do not paraphrase or infer meaning. note copies optional user words or null. occurred_on is a phone-calendar YYYY-MM-DD date; date_precision=day or month (month uses day01); is_first only when explicitly first. No past cue means today's date. Older memories without a usable date clarify. All instant-time and unrelated amount fields null. Never invent an exact date for an age-only memory.
 operation=correct: actions/query null, remove=false for edits and true only for deletions; actions must not be an empty array;  selector={kind,diaper_kind,title,expected_volume_ml}, with every unused selector field null. kind is feeding/diaper/weight/sleep/milestone. Select latest qualifying record only; explicit earlier/nth records clarify and ask the parent to choose in app. remove=true only for an explicit delete/remove request and all changes fields null. Deletion of last wet diaper uses selector.diaper_kind=wet; change last diaper to dirty uses selector.diaper_kind=null and changes.diaper_kind=dirty. Every edit/delete is only a PROPOSAL and requires a separate confirmation.
 Feeding total correction 'change last feed from 30ml to 80ml' uses expected_volume_ml=30, changes.correction_kind=total, amount_ml=80. 'from 30 to 80 mil' inherits the final unit for old 30 only. Simple 'change last feed to 80 mil' has expected_volume_ml=null. Left 20 mL / 剩返二十毫升 means leftover correction, amount_ml=20; never a new feeding. For other edits fill only the explicitly requested replacement fields. Dates use measurement_date or occurred_on; timestamp changes need an exact unambiguous instant, otherwise clarify/use app. Preserve all unspecified values. Never answer a correction as though applied.
-operation=query: actions/selector/changes/remove null. Questions about falling asleep use last_sleep_start, waking use last_sleep_end. Status report / care report use care_report (today totals plus latest feeding and sleep state), never a recording. query.kind is last_feeding (when and amount), milk_total (milk amount only), day_summary (full totals), wet_count, dirty_count, has_dirty, sleep_total, last_weight, last_milestone, last_diaper, last_sleep_start, last_sleep_end or care_report. day is explicit today/yesterday/ISO/English or Chinese calendar date, defaults to phone today for day totals and null for all-time last-record questions. Don't invent a clock window or select a different metric. 'How much has she drunk today?' is milk_total, 'when and how much was the last feeding?' last_feeding. 今日飲咗幾多奶=milk_total; 今日幾多濕尿片=wet_count; 今日有冇大便=has_dirty. Questions outside saved care facts, medical advice and ambiguous multi-day windows clarify; the database supplies all answers.`;
+operation=query: actions/selector/changes/remove null. Prefer the compositional query schema for conversational reads: domain feeding/diaper/sleep/weight/milestone/care; operation latest/first/exists/count/total/state/elapsed/duration/report. Keep state distinct from historical existence; wet/dirty include mixed, all diapers count changes once; naps mean daytime sleep, not all sleep. quantity consumed/offered/remaining must preserve the question. day and period are grounded by deterministic server code, never calculate answers. Use the legacy {kind,day} alternative only for existing kinds described below. Current-state sleep uses state, 'has slept' exists, 'last pee' latest wet diaper. English, Cantonese and code-switching synonyms carry the same domain/operation meaning. No missing record establishes real-world absence. Unknown/ambiguous temporal references clarify.  Questions about falling asleep use last_sleep_start, waking use last_sleep_end. Status report / care report use care_report (today totals plus latest feeding and sleep state), never a recording. query.kind is last_feeding (when and amount), milk_total (milk amount only), day_summary (full totals), wet_count, dirty_count, has_dirty, sleep_total, last_weight, last_milestone, last_diaper, last_sleep_start, last_sleep_end or care_report. day is explicit today/yesterday/ISO/English or Chinese calendar date, defaults to phone today for day totals and null for all-time last-record questions. Don't invent a clock window or select a different metric. 'How much has she drunk today?' is milk_total, 'when and how much was the last feeding?' last_feeding. 今日飲咗幾多奶=milk_total; 今日幾多濕尿片=wet_count; 今日有冇大便=has_dirty. Questions outside saved care facts, medical advice and ambiguous multi-day windows clarify; the database supplies all answers.`;
 }
 
 const clarification = (
@@ -173,7 +176,7 @@ function checkKeys(p: Record<string, unknown>, allowed: string[], required = all
 const compact = (p: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(p).filter(([, value]) => value !== null));
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-function resolveBaby(text: string, name: unknown, babies: Baby[]): Baby | undefined {
+export function resolveBaby(text: string, name: unknown, babies: Baby[]): Baby | undefined {
   const spoken = text.normalize("NFC").replace(/\bVictoria\s+Tracker\b/giu, "");
   const explicit = babies.filter((baby) => {
     const n = baby.name.trim().normalize("NFC");
@@ -551,6 +554,14 @@ export function interpretConversation(
   if (p.operation === "query") {
     if (["actions", "selector", "changes", "remove"].some((key) => p[key] !== null)) invalid();
     const query = object(p.query);
+    if ("domain" in query) {
+      const spec = interpretReadQuery(text, c);
+      if (
+        !spec || Object.keys(query).some((k) => !(k in readQuerySchema.properties)) ||
+        Object.keys(readQuerySchema.properties).some((k) => query[k] !== spec[k as keyof typeof spec])
+      ) return clarification();
+      return result({ spec });
+    }
     checkKeys(query, ["kind", "day"]);
     if (!queryKinds.includes(String(query.kind))) invalid();
     const kind = groundedQueryKind(text);

@@ -61,7 +61,7 @@ select pg_temp.expect_error($q$select pg_temp.converse('query',jsonb_build_objec
 select pg_temp.expect_error($q$select pg_temp.converse('batch','{"actions":[]}')$q$,'22023');
 select pg_temp.expect_error($q$select pg_temp.converse('correct','{"selector":{"kind":"diaper"},"changes":{"weight_kg":8},"remove":false}')$q$,'22023');
 select pg_temp.converse('action',jsonb_build_object('action','sleep_interval','payload',jsonb_build_object('occurred_at',now()-interval '50 minutes','ended_at',now()-interval '20 minutes')));
-select pg_temp.assert_true((pg_temp.converse('query',jsonb_build_object('kind','sleep_total','day',current_date))->'details'->>'sleep_minutes')::numeric=30,'query includes completed sleep duration');
+select pg_temp.assert_true((pg_temp.converse('query',jsonb_build_object('kind','sleep_total','day',current_date))->'details'->>'sleep_minutes')::numeric=greatest(0,round(extract(epoch from ((now()-interval '20 minutes')-greatest(now()-interval '50 minutes',current_date::timestamptz)))/60)),'query includes completed sleep clipped at midnight');
 insert into conversation_context values('sleep_batch',pg_temp.converse('batch',jsonb_build_object('actions',jsonb_build_array(jsonb_build_object('action','sleep_start','payload',jsonb_build_object('occurred_at',now()-interval '10 minutes')),jsonb_build_object('action','sleep_end','payload',jsonb_build_object('occurred_at',now()-interval '5 minutes')))))::text);
 select pg_temp.assert_true(jsonb_array_length((select value::jsonb->'event_ids' from conversation_context where key='sleep_batch'))=1,'start and wake in one description return one unique persisted session ID');
 
