@@ -62,8 +62,13 @@ Tokens/unresolved commands use device-only Keychain storage accessible after fir
 
 Refreshes run on activation, pull-to-refresh, successful commands, significant time/zone changes and every ten seconds while active. No background polling/Realtime subscription is used. Reads are paginated. Selection generations discard stale responses; failed refreshes do not fabricate zero totals. Mixed diapers contribute once to each wet/dirty count.
 
-Calendars and displayed times follow the phone; travelling parents can see different day totals. Growth uses bundled official WHO daily LMS tables (0–1856 days), calendar age and measurement date. Missing profile prerequisites disable reference curves without hiding measurements; premature percentile interpretation is unsupported. [WHO sources/hashes](../ios/VictoriaTracker/Resources/Growth/SOURCE.json)
+Calendars and displayed times follow the phone; travelling parents can see different day totals. Growth uses locally downloaded official WHO daily LMS tables (0–1856 days), calendar age and measurement date. Missing profile prerequisites disable reference curves without hiding measurements; premature percentile interpretation is unsupported. [WHO sources/hashes](../ios/VictoriaTracker/Resources/Growth/SOURCE.json)
 
 English, Cantonese and code-switching text use the same finite schema and deterministic quantity/date checks. Static server replies format database facts in English or Cantonese; the UI remains English. Captured phone offset transitions also define query-day boundaries; mixed diapers count in both wet and dirty totals and sleep is clipped to that day/reference. Missing latest records produce explicit no-record answers. A bounded live Cantonese 50 mL case persisted successfully with server language yue; spoken reply language was not separately confirmed. Siri supplies text and there is no separate transcription service.
 
 The static 88-item [milestone guide](MILESTONE_SOURCES.md) spans birth through five years, distinguishing CDC by-age checkpoints from Rourke visit surveillance. It uses chronological age and links to official CDC/AAP/RBR/CPS sources. Guide observations store explicit identity, not title similarity; rapid taps, uncertain retries and two-parent uniqueness use the same stable-command recovery path.
+
+
+## Conversational read pipeline
+
+The implementation adds a shared compositional query layer and an RLS/security-invoker snapshot RPC. Interpretation, retrieval, deterministic calculations, evidence assessment and bilingual formatting are separate; existing mutation contracts remain intact. Swift preserves optional read context before queuing, then retries the same body. Read context cannot grant mutation authority. Dashboard and query answers distinguish completed sleep from unconfirmed open elapsed time. [Design, taxonomy and boundaries](CONVERSATIONAL_QUERIES.md); [deployment status](RELEASE.md#v110--ios-10-16).

@@ -125,6 +125,8 @@ final class CareTests: XCTestCase {
     ]
     let summary = SleepDaySummary(sessions: sessions, day: day, asOf: date("2025-01-02T11:00:00Z"))
     XCTAssertEqual(summary.total, 3 * 3600)
+    XCTAssertEqual(summary.completedTotal, 2 * 3600)
+    XCTAssertEqual(summary.openElapsed, 3600)
     XCTAssertEqual(summary.sessionCount, 2)
     XCTAssertTrue(summary.includesOngoing)
     let empty = SleepDaySummary(sessions: [], day: day)
@@ -203,6 +205,70 @@ final class CareTests: XCTestCase {
     XCTAssertEqual(
       CalendarDate.string(local, timeZone: TimeZone(secondsFromGMT: 0)!),
       CalendarDate.string(instant, timeZone: zone))
+  }
+  func testReadQueryContextRoundTripAndLegacyBodiesRemainUnchanged() throws {
+    let now = date("2026-11-15T20:00:00Z")
+    let context = CareQueryContext(childID: UUID(), domain: .feeding, recordID: UUID(), at: now)
+    let original = CareCommand(text: "How much was that?", referenceAt: now)
+    let prepared = original.attaching(
+      queryContext: context, presentation: CareQueryPresentation(surface: .spoken))
+    XCTAssertNil(original.queryContext)
+    XCTAssertNil(original.presentation)
+    XCTAssertEqual(prepared.requestID, original.requestID)
+    XCTAssertEqual(prepared.referenceAt, original.referenceAt)
+    XCTAssertEqual(prepared.zoneOffsets, original.zoneOffsets)
+    XCTAssertEqual(prepared.queryContext, context)
+    let encoded = try APIJSON.encoder().encode(prepared)
+    let restored = try APIJSON.decoder().decode(CareCommand.self, from: encoded)
+    XCTAssertEqual(prepared, restored)
+    let body = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+    XCTAssertEqual((body["presentation"] as? [String: String])?["milk"], "ml")
+    XCTAssertEqual((body["query_context"] as? [String: Any])?["domain"] as? String, "feeding")
+    let legacy =
+      try JSONSerialization.jsonObject(with: APIJSON.encoder().encode(original)) as! [String: Any]
+    XCTAssertNil(legacy["query_context"])
+    XCTAssertNil(legacy["presentation"])
+    let pending = PendingCareCommand(userID: UUID(), command: prepared)
+    XCTAssertEqual(
+      try APIJSON.decoder().decode(PendingCareCommand.self, from: APIJSON.encoder().encode(pending))
+        .command, prepared)
+    let manual = CareCommand(action: "record", childID: UUID(), payload: CarePayload())
+    XCTAssertEqual(
+      manual.attaching(
+        queryContext: context, presentation: CareQueryPresentation(surface: .visual)), manual)
+    let confirmation = CareCommand(proposalID: UUID(), childID: UUID(), confirmed: true)
+    XCTAssertEqual(
+      confirmation.attaching(
+        queryContext: context, presentation: CareQueryPresentation(surface: .spoken)), confirmation)
+  }
+  func testReadQueryResponseAndMemoryExpireAndNeverCrossParentsOrMutations() throws {
+    let now = date("2026-11-15T20:00:00Z")
+    let child = UUID()
+    let user = UUID()
+    let context = CareQueryContext(childID: child, domain: .feeding, recordID: nil, at: now)
+    var response = CareResponse(
+      status: "answered", message: "80 mL", eventID: nil, childID: child, proposalID: nil)
+    response.queryContext = context
+    let decoded = try APIJSON.decoder().decode(
+      CareResponse.self, from: APIJSON.encoder().encode(response))
+    XCTAssertEqual(decoded.queryContext, context)
+    var memory = CareQueryMemory()
+    memory.receive(decoded, userID: user)
+    XCTAssertEqual(memory.context(userID: user, at: now.addingTimeInterval(599)), context)
+    XCTAssertNil(memory.context(userID: UUID(), at: now))
+    XCTAssertNil(memory.context(userID: user, at: now.addingTimeInterval(601)))
+    XCTAssertNil(memory.context(userID: user, at: now.addingTimeInterval(-1)))
+    memory.receive(
+      CareResponse(
+        status: "recorded", message: "Saved", eventID: UUID(), childID: child, proposalID: nil),
+      userID: user)
+    XCTAssertNil(memory.context(userID: user, at: now))
+    memory.receive(decoded, userID: user)
+    memory.clear()
+    XCTAssertNil(memory.context(userID: user, at: now))
+    let old = try APIJSON.decoder().decode(
+      CareResponse.self, from: Data(#"{"status":"answered","message":"80 mL"}"#.utf8))
+    XCTAssertNil(old.queryContext)
   }
   private func reference(_ sex: String) throws -> GrowthReference {
     #if canImport(VictoriaTrackerCore)

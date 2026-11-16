@@ -204,7 +204,7 @@ struct DashboardView: View {
           }
           Section("Sleep totals") {
             Text(
-              "Sleep shows the duration recorded within the selected local day, including any ongoing session up to now. A session spanning midnight contributes only its time within each day; it counts as a session on each day it overlaps."
+              "Sleep totals include completed sessions within the selected local day. Open-session elapsed time is shown separately and remains unconfirmed until a wake-up is recorded. A session spanning midnight contributes only its time within each day."
             )
           }
           Section("Keeping up to date") {
@@ -416,10 +416,10 @@ struct DashboardView: View {
       let milk =
         model.hasLoadedDay
         ? summary.milkML.formatted(.number.precision(.fractionLength(0...2))) : "—"
-      let duration = model.hasLoadedDay ? sleep.total.sleepDuration : "—"
+      let duration = model.hasLoadedDay ? sleep.completedTotal.sleepDuration : "—"
       let count =
         model.hasLoadedDay
-        ? "\(sleep.sessionCount) \(sleep.sessionCount == 1 ? "session" : "sessions")" : "recorded"
+        ? (sleep.includesOngoing ? "completed; \(sleep.openElapsed.sleepDuration) open, unconfirmed" : "completed") : "recorded"
       let wet = model.hasLoadedDay ? String(summary.wetCount) : "—"
       let dirty = model.hasLoadedDay ? String(summary.dirtyCount) : "—"
       let columns = dynamicTypeSize >= .accessibility3 ? 1 : 2

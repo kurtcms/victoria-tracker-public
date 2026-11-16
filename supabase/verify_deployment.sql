@@ -56,4 +56,10 @@ select 'private_v14_rpc_secured',count(*)=1 and bool_and(p.prosecdef and p.proco
   and not has_function_privilege('authenticated',p.oid,'EXECUTE')
   and not has_function_privilege('anon',p.oid,'EXECUTE'))
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where n.nspname='private' and p.proname='execute_care_conversation_v14';
+where n.nspname='private' and p.proname='execute_care_conversation_v14'
+union all
+select 'read_snapshot_invoker_secured',count(*)=1 and bool_and(not p.prosecdef and p.proconfig @> array['search_path=""']
+  and has_function_privilege('authenticated',p.oid,'EXECUTE')
+  and not has_function_privilege('anon',p.oid,'EXECUTE'))
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public' and p.proname='read_care_snapshot';

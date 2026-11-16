@@ -19,7 +19,7 @@ enum DayActivity: Identifiable {
 extension TimeInterval {
   var sleepDuration: String {
     let minutes = max(0, Int(self / 60))
-    return minutes >= 60 ? "\(minutes/60)h \(minutes%60)m" : "\(minutes)m"
+    return minutes >= 60 ? "\(minutes/60)h" + (minutes%60 > 0 ? " \(minutes%60)m" : "") : "\(minutes)m"
   }
 }
 struct SleepSummaryView: View {
@@ -35,11 +35,11 @@ struct SleepSummaryView: View {
         if model.hasLoadedDay {
           if let active {
             Text(
-              "\(model.error == nil ? "Sleeping now" : "Last known: sleeping") · \(active.duration(asOf: context.date).sleepDuration)"
+              "\(context.date.timeIntervalSince(active.startedAt) > 6 * 3600 ? "Sleep status uncertain" : "Recorded asleep") · \(active.duration(asOf: context.date).sleepDuration) elapsed; wake-up unconfirmed"
             )
             .font(.caption).foregroundStyle(.secondary)
           } else {
-            Text("No sleep running").font(.caption).foregroundStyle(.secondary)
+            Text("No open sleep recorded").font(.caption).foregroundStyle(.secondary)
           }
           Spacer(minLength: 0)
           if let active {

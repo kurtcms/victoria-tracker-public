@@ -1,3 +1,4 @@
+import type { Presentation, QueryContext } from "./query_types.ts";
 import { amountIsGrounded, describesLeftover } from "./quantities.ts";
 import { dateIsGrounded, phraseIsGrounded } from "./grounding.ts";
 import {
@@ -26,6 +27,8 @@ export type RequestCommand = {
   proposal_id?: string;
   confirmed?: boolean;
   language?: "en" | "yue";
+  query_context?: QueryContext;
+  presentation?: Presentation;
 };
 export type Outcome = { status: "needs_clarification" | "rejected"; message: string; code?: string };
 export type Action = { child_id: string; action: string; payload: Record<string, unknown> };
@@ -116,6 +119,8 @@ export function parse(raw: unknown, now: Date): RequestCommand {
     "proposal_id",
     "confirmed",
     "language",
+    "query_context",
+    "presentation",
   ], ["request_id", "reference_at", "time_zone", "utc_offset_seconds", "zone_offsets", "source", "mode"]);
   if (
     typeof c.request_id !== "string" || !uuid.test(c.request_id) || typeof c.time_zone !== "string" ||
@@ -123,6 +128,29 @@ export function parse(raw: unknown, now: Date): RequestCommand {
     !["siri", "text", "manual"].includes(String(c.source))
   ) fail("Invalid command metadata.");
   if (c.language !== undefined && !["en", "yue"].includes(String(c.language))) fail("Unsupported response language.");
+  if (c.query_context !== undefined) {
+    const q = object(c.query_context);
+    keys(q, ["child_id", "domain", "record_id", "at"], ["child_id", "domain", "at"]);
+    if (
+      typeof q.child_id !== "string" || !uuid.test(q.child_id) ||
+      !["feeding", "diaper", "sleep", "weight", "milestone", "care"].includes(String(q.domain)) ||
+      q.record_id !== undefined && (typeof q.record_id !== "string" || !uuid.test(q.record_id)) ||
+      typeof q.at !== "string" || !Number.isFinite(Date.parse(q.at))
+    ) fail("Invalid read conversation context.");
+    c.query_context = {
+      ...q,
+      child_id: String(q.child_id).toLowerCase(),
+      ...(q.record_id !== undefined ? { record_id: String(q.record_id).toLowerCase() } : {}),
+    };
+  }
+  if (c.presentation !== undefined) {
+    const p = object(c.presentation);
+    keys(p, ["milk", "weight", "surface"], ["milk", "weight", "surface"]);
+    if (
+      !["ml", "oz"].includes(String(p.milk)) || !["kg", "lb"].includes(String(p.weight)) ||
+      !["spoken", "visual"].includes(String(p.surface))
+    ) fail("Invalid presentation preferences.");
+  }
   const r = timestamp(c.reference_at);
   if (r > now.getTime() + 300000 || r < now.getTime() - 366 * 86400000) fail("Check the recording time.");
   try {
@@ -163,6 +191,8 @@ export function parse(raw: unknown, now: Date): RequestCommand {
       "mode",
       "child_id",
       "text",
+      "query_context",
+      "presentation",
     ], ["text"]);
     if (c.source === "manual" || typeof c.text !== "string" || !c.text.trim() || c.text.length > 1000) {
       fail("Describe care or ask a question in at most 1,000 characters.");

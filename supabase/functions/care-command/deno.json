@@ -1,8 +1,17 @@
 {
-  "compilerOptions": { "strict": true, "lib": ["deno.ns", "dom", "esnext"] },
-  "fmt": { "lineWidth": 120 },
+  "compilerOptions": {
+    "strict": true,
+    "lib": [
+      "deno.ns",
+      "dom",
+      "esnext"
+    ]
+  },
+  "fmt": {
+    "lineWidth": 120
+  },
   "tasks": {
-    "check": "deno check index.ts domain_test.ts handler_test.ts quantities_test.ts conversation_test.ts language_test.ts",
-    "test": "deno test domain_test.ts handler_test.ts quantities_test.ts conversation_test.ts language_test.ts"
+    "check": "deno check index.ts domain_test.ts handler_test.ts quantities_test.ts conversation_test.ts language_test.ts query_interpret_test.ts query_execute_test.ts query_format_test.ts query_pipeline_test.ts",
+    "test": "deno test domain_test.ts handler_test.ts quantities_test.ts conversation_test.ts language_test.ts query_interpret_test.ts query_execute_test.ts query_format_test.ts query_pipeline_test.ts"
   }
 }

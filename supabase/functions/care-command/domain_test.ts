@@ -416,7 +416,7 @@ Deno.test("milestone wording preserves hello and rejects model-invented titles o
   for (
     const patch of [
       { title: "First bicycle" },
-      { title: "First said goodbye" },
+      { title: "First waved goodbye" },
       { note: "She was excited and smiling" },
       { occurred_on: "2026-11-13" },
     ]

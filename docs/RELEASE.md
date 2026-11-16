@@ -1,33 +1,27 @@
 # Release status
 
-## v1.0.0 — iOS 1.0 (15)
+## v1.1.0 — iOS 1.0 (16)
 
-First tagged source release, November 15, 2026. The [changelog](../CHANGELOG.md) lists new features and fixes. Configure your own backend, Auth and development signing using [README](../README.md). This repository provides no hosted service access, family accounts or App Store/TestFlight binary.
+This developer-installable source release adds conversational recorded-care queries across feeding, diapers, sleep, weight and milestones. Configure your own backend, Auth and development signing through [README](../README.md). No hosted service access, family accounts, signing credentials or App Store/TestFlight binary is included.
 
-The public repository has independent, sanitized Git history. Examples and fixtures use synthetic observations; it is not byte-identical to the developer-installed application. The WHO numerical CSVs are excluded and downloaded locally under the separate [third-party terms](../THIRD_PARTY_NOTICES.md). The MIT license covers original code/documentation/artwork, not third-party material or endorsement.
+The public snapshot has independent Git history. Examples and fixtures are synthetic, not records of a real child. WHO numerical CSVs are excluded and downloaded locally under the separate [third-party terms](../THIRD_PARTY_NOTICES.md). The MIT license covers original application code, documentation and artwork; it does not relicense third-party material or imply endorsement. The public snapshot is not byte-identical to the developer-installed application.
+
+## Query behavior
+
+Compositional interpretation distinguishes recorded sleep state from historical sleep, existence from counts, latest records from latest subtypes, durations from elapsed time, and consumed milk from unsupported offered/remaining observations. Missing records do not prove that an activity did not occur. Open sleep is shown separately from completed duration; stale or inconsistent histories produce qualified answers. Short feeding follow-ups may bind an exact prior record, with explicit names/times taking precedence. [Taxonomy, examples and limitations](CONVERSATIONAL_QUERIES.md)
 
 ## Verification
 
-The release implementation passed 127 mocked backend tests/type checks, 57 Swift core tests, 69 native XCTest tests, six Python security tests and the full isolated PostgreSQL migration/RLS/query/concurrency suite. The signed developer build, source/bundle secret scans and compiled English/zh-HK shortcut archives passed. The sanitized public export independently passed the same 127 backend, 57 core, 69 native and six Python tests, the isolated database suite, source/bundle scans and compiled English/zh-HK shortcut checks. See [testing](TESTING.md) for reproducible commands.
+The sanitized public candidate passed 138 current-care and 42 legacy backend tests/type checks, 59 Swift core tests, 71 native simulator tests, six Python security tests, the isolated PostgreSQL migration/RLS/query/concurrency suite, project regeneration and source/bundle secret scans. An unsigned iPhone-SDK build and compiled English/zh-HK Siri-resource checks passed without private client configuration. Official WHO tables downloaded only into the disposable validation copy matched the pinned manifest; numerical tables remain excluded from publication. Run the local commands in [testing](TESTING.md) to reproduce the checks. Automated tests use synthetic data and mocked Auth/database/provider boundaries or a disposable local PostgreSQL database; they do not establish paid-provider interpretation quality or physical speech-recognition accuracy.
 
-Bounded physical checks on developer phones established:
-
-- Variable-volume milk and wet/dirty/mixed diaper recording, relative dates, clarifications and informative future-event rejection.
-- One atomic milk-plus-diaper description, a read-only feeding answer, a confirmed correction preserving the same record, a confirmed deletion and a negation saving nothing.
-- A Cantonese recording with the correct amount and persisted result. Spoken reply language and broader speech-recognition variants were not independently established.
-- Shared family access on two phones, offline manual retry without duplication, shared sleep across restart and completion by the other parent, and locked-phone Siri after the first unlock.
-- Guide milestone check/uncheck and source placement, plus six English queries: dirty diaper today, milk today, latest sleep start, latest wake, status report and care report. Care snapshots remained unchanged across the query session.
-
-The milk-only answer was corrected after a live test to omit other totals and decimal zeroes. Report details subsequently shortened same-day dates to times while retaining dates for earlier days; that final wording has regression coverage without another physical session.
-
-These results do not imply unrestricted model or Siri accuracy. Remaining unverified physical cases include hypothetical rejection, milestone editing/cancellation beyond the guide case, manual diaper entry, signed-out Siri/re-login, historical report variants, and the broader guide/manual-editor/concurrency matrix. Do not run paid or destructive checks automatically; use [acceptance procedures](ACCEPTANCE.md) with explicit authorization.
+Historical bounded physical checks are documented in [acceptance coverage](ACCEPTANCE.md). They do not prove every new paraphrase, historical window, follow-up or Cantonese response. Do not restart stopped physical/paid suites without explicit authorization.
 
 ## Runtime limits
 
-Siri uses a short trigger followed by a prompted description. Unrestricted trailing speech inside a single App Shortcut utterance is not promised. Recording requires internet access; uncertain submissions use the original pending request ID rather than a general offline queue. The app UI is English; Cantonese recognition depends on the phone's configured Siri language.
+Siri uses a short trigger followed by a prompted description. Unrestricted trailing speech inside one App Shortcut utterance is not promised. Recording requires internet access; uncertain submissions retry the original prepared request rather than creating a general offline queue. The app UI is English; Cantonese recognition depends on the phone's configured Siri language.
 
-Multiple babies require an explicit spoken profile name. Multiple events validate and save together. Corrections/deletions require separate confirmation. Normal new descriptions are limited to the preceding 366 days. Growth charts do not diagnose development or interpret premature reference ages.
+Multiple babies require an explicit spoken profile name; selection or follow-up context cannot replace it. Batches validate/save atomically, and edits/deletions need separate confirmation. Context is in-memory and expires after ten minutes. Naps are defined by local start time because no nap label is stored. Offered/remaining/estimated milk observations and broad semantic milestone matching are not stored or inferred. Incomplete snapshots fail explicitly above 10,000 records per domain. Growth charts make no medical conclusions.
 
 ## Backend upgrades
 
-Apply the five committed migrations in filename order before deploying the matching `care-command` and legacy `record-event` functions. Preserve applied migration bytes. The fifth migration wraps the prior conversation RPC behind a private permission boundary and adds sleep/care-report reads. Keep gateway JWT verification enabled and the `private` schema unexposed. [API](CARE_API.md), [security](SECURITY_AUDIT.md)
+Apply all six migrations in filename order before deploying the matching functions. The new `202611160001_read_snapshot.sql` adds a stable security-invoker snapshot under caller RLS. Preserve all previously applied migration bytes and legacy RPC contracts. Keep gateway JWT verification enabled and the `private` schema unexposed. Run the read-only post-migration checks; never run destructive SQL fixtures on a hosted database. [API](CARE_API.md), [security](SECURITY_AUDIT.md)

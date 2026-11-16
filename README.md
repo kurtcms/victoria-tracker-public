@@ -4,13 +4,17 @@
 
 A native iOS 17+ app built with SwiftUI, App Intents, Supabase and OpenAI structured extraction. Two parents share baby profiles, feedings, diapers, sleep, weights and milestones. The iOS app has no third-party package dependencies.
 
-Source release **v1.0.0** corresponds to iOS **1.0 (15)**. See the [changelog](CHANGELOG.md) for features and fixes and [release status](docs/RELEASE.md) for validation limits.
+Source release **v1.1.0** corresponds to iOS **1.0 (16)**. See the [changelog](CHANGELOG.md) for features and fixes and [release status](docs/RELEASE.md) for validation limits.
 
 It uses a short Siri conversation:
 
 > “Hey Siri, Victoria Tracker.” → “What’s up?” → “Victoria drank 180 mL.”
 
 Siri confirms saving only after the database confirms persistence; questions return read-only answers. English, Cantonese and code-switching descriptions are implemented, with English app screens and an internet connection required. Cantonese Siri recognition depends on the phone’s Siri language; a bounded 50 mL recording passed on the tested phone. Spoken reply language was not separately confirmed. Arbitrary descriptions cannot reliably be captured inside a single App Shortcut trigger; the supported interaction is two turns. [Siri behavior and examples](docs/SIRI.md)
+
+## Conversational care questions
+
+Ask about recorded feeding, diapers, sleep, weight and milestones in English or Cantonese. Shared interpretation distinguishes current recorded state, historical events, counts, latest events, totals and elapsed time. Answers qualify missing or stale records, separate completed sleep from open sessions, and use natural units and contextual dates. Short follow-ups can refer to the exact prior feeding. See [query examples, taxonomy and limitations](docs/CONVERSATIONAL_QUERIES.md).
 
 ## Demo
 
@@ -48,7 +52,7 @@ python3 --version
 
 The backend commands below use CLI 3 syntax, verified with **3.1.0**. Other installation options: [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), [Deno](https://docs.deno.com/runtime/getting_started/installation/).
 
-**Using an existing configured backend?** Obtain its HTTPS URL, **public publishable key**, and an account/family invitation from the owner, then skip to step 3. Build 14 requires the additive `202611140001_voice_care.sql` migration and updated `care-command` function; the owner should review/apply that upgrade first. Build 15 additionally needs `202611150001_care_queries.sql` and the matching function update; apply both to your own project before using these features. Do not rerun setup or change an existing project’s Auth settings. No private key is needed to build the app.
+**Using an existing configured backend?** Obtain its HTTPS URL, **public publishable key**, and an account/family invitation from the owner, then skip to step 3. Build 14 requires the additive `202611140001_voice_care.sql` migration and updated `care-command` function; the owner should review/apply that upgrade first. Build 16 additionally needs `202611160001_read_snapshot.sql` and the matching `care-command` update, after the build 15 `202611150001_care_queries.sql` migration. Apply all required migrations to your own project before using these features. Do not rerun setup or change an existing project’s Auth settings. No private key is needed to build the app.
 
 ## 2. Set up a fresh Supabase backend
 
@@ -90,7 +94,7 @@ supabase functions deploy record-event --remote="$VT_PROJECT_REF" --use-api
 
 Replace `YOUR_PROJECT_REF` with the project reference from its dashboard. Interactive hosted commands ask for confirmation. All post-migration checks must pass. **Never run `supabase/tests/*.sql` on a hosted project.** Those are destructive fixtures for disposable local databases.
 
-The source has five migration files in filename order: the original three, `202611140001_voice_care.sql`, then `202611150001_care_queries.sql`. Apply all five to a fresh project, then treat them as immutable. Preserve them unchanged after application; future schema changes need a new migration. `care-command` handles current app actions. `record-event` is retained for older pending entries and shared validation code. Both have **`verify_jwt=true`** and independently authenticate the signed-in user; do not deploy with verification disabled.
+The source has six migration files in filename order: the original three, `202611140001_voice_care.sql`, `202611150001_care_queries.sql`, then `202611160001_read_snapshot.sql`. Apply all six to a fresh project before deploying the functions, then treat them as immutable. Preserve them unchanged after application; future schema changes need a new migration. `care-command` handles current app actions. `record-event` is retained for older pending entries and shared validation code. Both have **`verify_jwt=true`** and independently authenticate the signed-in user; do not deploy with verification disabled.
 
 There is deliberately no OpenAI key yet. Account/family setup and manual recording work without OpenAI; natural-language recording will work after step 5.
 
@@ -156,7 +160,7 @@ Set `OPENAI_API_KEY` and optionally `OPENAI_MODEL` (default **`gpt-4.1-mini`**).
 supabase secrets set --env-file supabase/.env.local --remote="$VT_PROJECT_REF"
 ```
 
-Supabase supplies `SUPABASE_URL` and normally `SUPABASE_ANON_KEY` to functions. The custom `VT_` variable avoids the reserved environment prefix. The runtime uses the public key and caller JWT; it never needs a service-role key. Manual actions and confirmations do not call OpenAI; natural-language interpretation does. Build 15 bypasses the model for a closed set of authenticated English care questions; the six common English query examples passed their authorized physical checks.
+Supabase supplies `SUPABASE_URL` and normally `SUPABASE_ANON_KEY` to functions. The custom `VT_` variable avoids the reserved environment prefix. The runtime uses the public key and caller JWT; it never needs a service-role key. Manual actions and confirmations do not call OpenAI. Recognized English/Cantonese care questions use deterministic interpretation and formatting; other supported natural language uses finite model extraction. Automated checks and historical physical results have different coverage; see [release status](docs/RELEASE.md).
 
 ## 6. Verify Siri recording
 
@@ -169,7 +173,7 @@ Sign in and open the dashboard once. Enable Siri and any Victoria Tracker permis
 
 Siri may display a confirmation silently according to its response settings. Enable **Always Show Request** and **Always Show Siri Captions** under Siri Responses to show speech; choose spoken responses if desired. With multiple babies, include the name; an omitted name asks for clarification. UI selection does not substitute for the spoken name.
 
-After the prompt you can describe one to five events for the same baby, ask about saved records or daily totals, or request a correction/deletion of the latest qualifying record. Every edit or deletion needs a separate confirmation. `mil` is accepted as mL; ounces are unsupported. In the Milestones **Age guide**, tap the title/check button to record today, or a checked item to review removal. **Choose an earlier date** remains available; source links sit in checkpoint descriptions. The [source notes](docs/MILESTONE_SOURCES.md) explain the checkpoint ages.
+After the prompt you can describe one to five events for the same baby, ask about saved records or daily totals, or request a correction/deletion of the latest qualifying record. Every edit or deletion needs a separate confirmation. `mil` is accepted as mL for recording; ounce recording is unsupported. Read responses can display approximate US units when explicitly requested. In the Milestones **Age guide**, tap the title/check button to record today, or a checked item to review removal. **Choose an earlier date** remains available; source links sit in checkpoint descriptions. The [source notes](docs/MILESTONE_SOURCES.md) explain the checkpoint ages.
 
 Further examples and optional regression steps: [Siri](docs/SIRI.md), [acceptance checks](docs/ACCEPTANCE.md). A fresh Siri invocation is a separate recording. If a response is lost, use the original **Retry / check recording** entry instead of speaking the event again.
 
@@ -211,6 +215,6 @@ docs/        Architecture, API, security, Siri, testing and release status
 
 Refreshes happen on activation, successful writes, pull-to-refresh and every ten seconds while active. Each phone uses its current timezone; travelling parents can see different day totals for shared UTC records. Recording is online, with recovery of uncertain requests rather than a general offline queue. Normal entry supports the preceding 366 days. WHO curves cover birth through five years; premature percentile interpretation is outside this MVP.
 
-See [setup](docs/SETUP.md), [architecture](docs/ARCHITECTURE.md), [API](docs/CARE_API.md), [security](docs/SECURITY_AUDIT.md) and [release status/known limits](docs/RELEASE.md). Build 15 is deployed and installed on both phones; the six earlier build 14 live cases retain their [recorded limits](docs/RELEASE.md). Build 15 milestone interactions and the six English query cases passed. Four older physical cases and the broader guide/manual-editor matrix remain unverified. The public source release uses a separately sanitized snapshot.
+See [setup](docs/SETUP.md), [architecture](docs/ARCHITECTURE.md), [API](docs/CARE_API.md), [security](docs/SECURITY_AUDIT.md), [conversational query limits](docs/CONVERSATIONAL_QUERIES.md) and [release validation](docs/RELEASE.md). Historical physical results remain bounded by their recorded scope; new real-provider and speech-recognition accuracy is not claimed.
 
 Original code and artwork: [MIT](LICENSE). WHO reference tables are downloaded locally and are excluded from this repository; their use is governed by [third-party notices](THIRD_PARTY_NOTICES.md).

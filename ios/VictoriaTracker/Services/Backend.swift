@@ -51,6 +51,7 @@ actor Backend {
   private let transport: URLSession
   private var refreshing: Task<AuthSession, Error>?
   private var authGeneration = 0
+  private var queryMemory = CareQueryMemory()
   private var confirmingEmail = false
   private var inFlight: [UUID: Task<RecordResponse, Error>] = [:]
   private var careInFlight: [UUID: Task<CareResponse, Error>] = [:]
@@ -109,6 +110,7 @@ actor Backend {
   }
   func signIn(email: String, password: String) async throws {
     authGeneration += 1
+    queryMemory.clear()
     let generation = authGeneration
     do {
       let result = try await send(
@@ -130,6 +132,7 @@ actor Backend {
       throw TrackerError.message("Sign out before creating another account.")
     }
     authGeneration += 1
+    queryMemory.clear()
     do {
       let existing = try SecureStorage.read(
         PendingEmailConfirmation.self, account: "email-confirmation")
@@ -180,6 +183,7 @@ actor Backend {
       }
       try SecureStorage.write(session, account: "session")
       authGeneration += 1
+      queryMemory.clear()
       try? SecureStorage.delete(account: "email-confirmation")
       return "Email confirmed. You’re signed in."
     } catch {
@@ -192,6 +196,7 @@ actor Backend {
   func signOut() async throws {
     let session = try savedSession()
     authGeneration += 1
+    queryMemory.clear()
     refreshing?.cancel()
     refreshing = nil
     try SecureStorage.delete(account: "session")
@@ -229,6 +234,7 @@ actor Backend {
     guard generation == authGeneration else {
       throw TrackerError.message("The signed-in parent changed. Please try again.")
     }
+    queryMemory.clear()
     try SecureStorage.write(refreshed, account: "session")
     return refreshed
   }
@@ -468,6 +474,14 @@ extension Backend {
       allCarePending().filter { !($0.id == id && $0.userID == user) }, account: "care-pending")
   }
   func performCare(_ command: CareCommand) async throws -> CareResponse {
+    do { return try await performCareAttempt(command) } catch {
+      queryMemory.clear()
+      throw error
+    }
+  }
+  private func performCareAttempt(_ command: CareCommand, attachReadContext: Bool = true)
+    async throws -> CareResponse
+  {
     if let task = careInFlight[command.id] { return try await task.value }
     let current = try await session()
     var entries = try allCarePending()
@@ -476,15 +490,27 @@ extension Backend {
     {
       throw TrackerError.message("This pending attempt belongs to another parent or command.")
     }
+    // Only a fresh text invocation receives ephemeral context/presentation.
+    // Queued commands retain their exact original body across every retry.
+    let prepared: CareCommand
+    if !attachReadContext || entries.contains(where: { $0.id == command.id }) {
+      prepared = command
+    } else {
+      prepared = command.attaching(
+        queryContext: command.queryContext
+          ?? queryMemory.context(userID: current.userID, at: command.referenceAt),
+        presentation: command.presentation
+          ?? CareQueryPresentation(surface: command.source == "siri" ? .spoken : .visual))
+    }
     if !entries.contains(where: { $0.id == command.id }) {
       guard entries.count < 100 else {
         throw TrackerError.message("Resolve pending attempts before recording more.")
       }
-      entries.append(PendingCareCommand(userID: current.userID, command: command))
+      entries.append(PendingCareCommand(userID: current.userID, command: prepared))
       try SecureStorage.write(entries, account: "care-pending")
     }
     let task = Task<CareResponse, Error> {
-      try await self.submitCare(command, user: current.userID)
+      try await self.submitCare(prepared, user: current.userID)
     }
     careInFlight[command.id] = task
     defer { careInFlight[command.id] = nil }
@@ -492,23 +518,29 @@ extension Backend {
   }
   private func submitCare(_ command: CareCommand, user: UUID) async throws -> CareResponse {
     let encoded = try APIJSON.encoder().encode(command)
+    let generation = authGeneration
     for attempt in 0..<2 {
       do {
         let raw = try await authorized(
           path: "/functions/v1/care-command", method: "POST", body: encoded, expectedUser: user)
         let result = try APIJSON.decoder().decode(CareResponse.self, from: raw)
         guard
-          ["recorded", "answered", "needs_confirmation", "needs_clarification", "rejected"].contains(
-            result.status),
+          ["recorded", "answered", "needs_confirmation", "needs_clarification", "rejected"]
+            .contains(
+              result.status),
           result.status != "recorded" || result.isPersisted,
           result.status != "answered" || result.childID != nil,
           result.status != "needs_confirmation" || result.needsConfirmation,
           command.childID == nil || result.childID == nil || result.childID == command.childID
+            || (command.mode == "text" && result.isAnswered)
         else {
           throw TrackerError.message(
             "The server did not confirm this action. Check the pending attempt.")
         }
         try removeCarePending(command.id, user: user)
+        if generation == authGeneration, try savedSession()?.userID == user {
+          queryMemory.receive(result, userID: user)
+        }
         return result
       } catch let error as URLError
         where attempt == 0 && [.timedOut, .networkConnectionLost].contains(error.code)
@@ -524,7 +556,10 @@ extension Backend {
     guard try savedSession()?.userID == entry.userID else {
       throw TrackerError.message("Sign in as the parent who started this action.")
     }
-    return try await performCare(entry.command)
+    do { return try await performCareAttempt(entry.command, attachReadContext: false) } catch {
+      queryMemory.clear()
+      throw error
+    }
   }
   func dismissCare(_ entry: PendingCareCommand) throws {
     guard try savedSession()?.userID == entry.userID, careInFlight[entry.id] == nil else {

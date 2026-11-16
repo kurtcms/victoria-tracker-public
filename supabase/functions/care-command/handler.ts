@@ -1,15 +1,10 @@
-import {
-  APIError,
-  Baby,
-  interpretationUnavailableMessage,
-  object,
-  parse,
-  phoneDate,
-  uuid,
-  validateAction,
-} from "./domain.ts";
+import { APIError, Baby, interpretationUnavailableMessage, object, parse, uuid, validateAction } from "./domain.ts";
 import { conversationPrompt, conversationSchema, interpretConversation, knownCareQuery } from "./conversation.ts";
 import { detectLanguage, localizeResponse } from "./language.ts";
+import { conversationalRead, legacyQuerySpec, queryWithContext } from "./query_service.ts";
+import { calculateQuery, type Snapshot } from "./query_execute.ts";
+import { formatQuery } from "./query_format.ts";
+import type { QueryFacts, QuerySpec } from "./query_types.ts";
 // Do not log request text, family data, provider output or credentials.
 type Config = { supabaseURL: string; supabaseKey: string; openAIKey: string; model: string };
 type Dependencies = { fetch: typeof fetch; now: () => Date };
@@ -83,8 +78,21 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
       if (user.is_anonymous === true) throw new APIError(403, "anonymous_user", "Use your parent account.");
       const command = parse(await body(req), deps.now());
       const language = command.language ?? detectLanguage(command.text ?? "");
-      const resultJSON = (value: Record<string, unknown>, status = 200) =>
-        json(localizeResponse(value, language), status);
+      const resultJSON = (value: Record<string, unknown>, status = 200) => {
+        if (value.status === "answered" && value.details && object(value.details).version === 2) {
+          return json({
+            ...value,
+            language,
+            message: formatQuery(value.details as QueryFacts, {
+              command,
+              language,
+              presentation: command.presentation ??
+                { milk: "ml", weight: "kg", surface: command.source === "siri" ? "spoken" : "visual" },
+            }),
+          }, status);
+        }
+        return json(localizeResponse(value, language), status);
+      };
       const requestHash = await hash(command);
       const rest = (path: string, data?: unknown) =>
         deps.fetch(config.supabaseURL + "/rest/v1/" + path, {
@@ -143,7 +151,9 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
       if (command.child_id && !babies.some((b) => b.id === command.child_id)) {
         throw new APIError(404, "child_unavailable", "That baby is not available in your family.");
       }
-      const directQuery = command.mode === "text" ? knownCareQuery(babies, command, deps.now()) : undefined;
+      const directQuery = command.mode === "text"
+        ? conversationalRead(babies, command) ?? knownCareQuery(babies, command, deps.now())
+        : undefined;
       let operation: string;
       let payload: Record<string, unknown>;
       let childID: string;
@@ -231,6 +241,52 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
         payload = result.payload;
         childID = result.child_id;
       }
+      if (operation === "query") {
+        const spec = payload.spec as QuerySpec | undefined ?? legacyQuerySpec(payload, command);
+        if (!spec) {
+          return resultJSON({
+            status: "needs_clarification",
+            message: "Please ask about one clear recorded-care question.",
+          });
+        }
+        const read = await rest("rpc/read_care_snapshot", {
+          p_child_id: childID,
+          p_reference_at: command.reference_at,
+        });
+        if (!read.ok) {
+          throw new APIError(503, "query_unavailable", "I couldn’t read the care records. Please try again.");
+        }
+        let facts: QueryFacts;
+        try {
+          facts = calculateQuery(
+            queryWithContext(spec, command, childID),
+            await read.json() as Snapshot,
+            command,
+            babies.find((b) => b.id === childID)!,
+          );
+        } catch {
+          throw new APIError(
+            503,
+            "query_unavailable",
+            "I couldn’t obtain a complete, reliable set of care records. Please try again.",
+          );
+        }
+        const selected = facts.records[0];
+        return resultJSON({
+          status: "answered",
+          child_id: childID,
+          message: "",
+          details: facts,
+          query_context: {
+            child_id: childID,
+            domain: spec.domain,
+            at: command.reference_at,
+            ...(["latest", "first", "duration"].includes(spec.operation) && selected && facts.records.length === 1
+              ? { record_id: selected.id }
+              : {}),
+          },
+        });
+      }
       const r = await rest("rpc/execute_care_conversation", {
         p_child_id: childID,
         p_request_id: command.request_id,
@@ -239,11 +295,7 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
         p_language: language,
         p_reference_at: command.reference_at,
         p_source: command.source,
-        // Milk-only questions reuse the authorized daily totals calculation.
-        // Limit the spoken answer after the database returns those facts.
-        p_payload: operation === "query" && payload.kind === "milk_total"
-          ? { ...payload, kind: "day_summary" }
-          : payload,
+        p_payload: payload,
         p_time_zone: command.time_zone,
         p_utc_offset_seconds: command.utc_offset_seconds,
         p_zone_offsets: command.zone_offsets,
@@ -293,15 +345,6 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
         result.status === "needs_confirmation" &&
           (typeof result.proposal_id !== "string" || !uuid.test(result.proposal_id))
       ) throw Error("Unconfirmed result");
-      if (operation === "query" && payload.kind === "milk_total" && result.status === "answered") {
-        const facts = object(result.details);
-        if (facts.query_kind !== "day_summary") throw Error("Unexpected query facts");
-        result.details = {
-          ...facts,
-          query_kind: "milk_total",
-          is_today: facts.day === phoneDate(command.reference_at, command),
-        };
-      }
       return resultJSON(result);
     } catch (e) {
       if (e instanceof APIError) return json({ code: e.code, message: e.message }, e.status);

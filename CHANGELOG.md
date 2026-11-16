@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.1.0] - 2026-11-15
+
+### Added
+
+- Conversational read queries across feeding, diapers, sleep, weight and milestones using shared English/Cantonese interpretation rather than a handler per phrase.
+- Separate current recorded state, historical existence, counts, latest subtypes, totals, elapsed time and duration.
+- Short-lived exact-feeding follow-ups, with explicit child names and time scopes taking precedence.
+- A caller-authorized read snapshot RPC that leaves mutation, confirmation and atomic batch contracts intact.
+
+### Improved
+
+- Qualify missing, incomplete, stale and inconsistent records; missing observations never become proof of a real-world negative.
+- Separate completed sleep from elapsed time in open sessions, including local-day boundaries and timezone transitions.
+- Report milk consumed without substituting offered volume; count mixed diapers once per change and once toward each wet/dirty total.
+- Use natural spoken/visual durations, units and contextual dates; keep concise questions focused and detailed reports relevant.
+
+### Validation and limits
+
+- Public candidate validation results are recorded in [release status](docs/RELEASE.md).
+- New real-provider and physical recognition tests are not claimed; existing acceptance evidence retains its recorded scope.
+- This is an MIT-licensed source release corresponding to iOS 1.0 (16), with synthetic fixtures and separately governed WHO numerical tables excluded.
+
 ## [1.0.0] - 2026-11-15
 
 First tagged source release, corresponding to iOS **1.0 (15)**. This is a source release for developer installation, not an App Store or TestFlight distribution.
