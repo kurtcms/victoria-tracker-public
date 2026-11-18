@@ -41,7 +41,7 @@ These six common English forms are matched by an authenticated closed grammar wi
 - “Status report, Victoria.”
 - “Care report, Victoria.”
 
-The report combines today’s totals, the latest feeding and recorded sleep state. Supported historical reports stop at that day’s cutoff. Use the actual profile name; multiple babies still require one literal name, and mixed write requests do not match this shortcut grammar. The six English examples passed physical checks; Cantonese query replies have automated coverage only. The endpoint is deployed as the matching `care-command` function as of November 15, 2026, and build 15 is installed on both phones. The six separately authorized English query cases passed with unchanged care snapshots. No further paid live tests are requested.
+The report combines today’s totals, the latest feeding and recorded sleep state. Supported historical reports stop at that day’s cutoff. Use the actual profile name; multiple babies still require one literal name, and mixed write requests do not match this shortcut grammar. The six English examples passed physical checks; Cantonese query replies have automated coverage only. In the historical November 15, 2026 build-15 checkpoint, the six separately authorized English query cases passed with unchanged care snapshots. That checkpoint does not identify the current deployment or installed build; consult [release status](RELEASE.md) for source-bound evidence. No new live or paid acceptance is established by later source releases.
 
 ## Responses and recovery
 

@@ -4,7 +4,7 @@
 
 A native iOS 17+ app built with SwiftUI, App Intents, Supabase and OpenAI structured extraction. Two parents share baby profiles, feedings, diapers, sleep, weights and milestones. The iOS app has no third-party package dependencies.
 
-Source release **v1.1.0** corresponds to iOS **1.0 (16)**. See the [changelog](CHANGELOG.md) for features and fixes and [release status](docs/RELEASE.md) for validation limits.
+Source-release versions and the iOS marketing/build version are independent. See the [changelog](CHANGELOG.md) for features and fixes and [release status](docs/RELEASE.md) for validation limits.
 
 It uses a short Siri conversation:
 

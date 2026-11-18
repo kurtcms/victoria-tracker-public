@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1] - 2026-11-18
+
+### Fixed
+
+- Remove stale README version/build claims and distinguish historical Siri acceptance from current release status.
+- Clarify verification dates and version mappings without changing app or backend behavior.
+
 ## [1.2.0] - 2026-11-18
 
 ### Added

@@ -1,8 +1,8 @@
 # Release status
 
-## v1.2.0 — iOS 1.0 (17)
+## v1.2.1 — iOS 1.0 (17)
 
-This developer-installable source release improves recent-event recording, memory browsing and recorded sleep-state replies. It retains conversational recorded-care queries across feeding, diapers, sleep, weight and milestones. Configure your own backend, Auth and development signing through [README](../README.md). No hosted service access, family accounts, signing credentials or App Store/TestFlight binary is included.
+This documentation-only patch corrects stale release/version claims and clarifies historical Siri acceptance. App and backend source are unchanged from v1.2.0, which improved recent-event recording, memory browsing and recorded sleep-state replies. It retains conversational recorded-care queries across feeding, diapers, sleep, weight and milestones. Configure your own backend, Auth and development signing through [README](../README.md). No hosted service access, family accounts, signing credentials or App Store/TestFlight binary is included.
 
 The public snapshot has independent Git history. Examples and fixtures are synthetic, not records of a real child. WHO numerical CSVs are excluded and downloaded locally under the separate [third-party terms](../THIRD_PARTY_NOTICES.md). The MIT license covers original application code, documentation and artwork; it does not relicense third-party material or imply endorsement. The public snapshot is not byte-identical to the developer-installed application.
 
@@ -18,7 +18,9 @@ Compositional interpretation distinguishes recorded sleep state from historical 
 
 ## Verification
 
-The v1.1.0 sanitized public candidate passed 138 current-care and 42 legacy backend tests/type checks, 59 Swift core tests, 71 native simulator tests, six Python security tests, the isolated PostgreSQL migration/RLS/query/concurrency suite, project regeneration and source/bundle secret scans. The v1.2.0 sanitized candidate passed 145 current-care and 42 legacy backend tests/type checks, 60 Swift core tests, 72 native simulator tests, six Python security tests, the isolated PostgreSQL suite, an unsigned iPhone-SDK build, source/bundle scans and compiled English/Cantonese Siri checks. Its validation-only WHO CSVs matched the pinned provenance hashes and remain excluded from publication. An unsigned iPhone-SDK build and compiled English/zh-HK Siri-resource checks passed without private client configuration. Official WHO tables downloaded only into the disposable validation copy matched the pinned manifest; numerical tables remain excluded from publication. Run the local commands in [testing](TESTING.md) to reproduce the checks. Automated tests use synthetic data and mocked Auth/database/provider boundaries or a disposable local PostgreSQL database; they do not establish paid-provider interpretation quality or physical speech-recognition accuracy.
+The v1.2.0 sanitized source passed 145 current-care and 42 legacy backend tests/type checks, 60 Swift core tests, 72 native simulator tests, six Python security tests, isolated PostgreSQL, unsigned iPhone-SDK compilation, source/bundle secret scans and compiled English/Cantonese Siri-resource checks. Validation-only WHO CSVs matched the pinned manifest and remain excluded from publication.
+
+For v1.2.1, application/backend/test/configuration bytes and modes are unchanged; those source-bound results remain applicable. Documentation, local links, release mappings, the exact exported tree and secret/privacy boundaries are rechecked. This source-only metadata patch does not install a new binary or establish new live model/speech accuracy. Historical v1.1.0 results remain recorded in its immutable release; counts from different releases are not combined. Run [testing](TESTING.md) to reproduce checks with synthetic mocks or disposable PostgreSQL.
 
 Historical bounded physical checks are documented in [acceptance coverage](ACCEPTANCE.md). They do not prove every new paraphrase, historical window, follow-up or Cantonese response. Do not restart stopped physical/paid suites without explicit authorization.
 
