@@ -144,7 +144,7 @@ Deno.test("sleep totals separate completed duration from open estimates and stal
   );
   assert(/record|recorded/.test(state));
   assert(/stale|out of date/.test(state));
-  assert(/confirm/.test(state));
+  assert(state.includes("No wake-up recorded since."));
 });
 Deno.test("reports include totals, latest feeding, recorded sleep state and detailed records", () => {
   const report = facts({
@@ -260,5 +260,31 @@ Deno.test("subtype diaper reports do not expose unrelated category totals", () =
     assert(answer.includes("1 " + subtype + " diaper"), answer);
     assert(!answer.includes("2 diaper changes"), answer);
     assert(!answer.includes(subtype === "wet" ? "dirty diapers" : "wet diapers"), answer);
+  }
+});
+
+Deno.test("sleep state explains the missing next transition in plain language", () => {
+  for (const waking of [false, true]) {
+    for (const stale of [false, true]) {
+      const state = facts({
+        query: { ...query, domain: "sleep", operation: "state", period: "all", day: null },
+        sleep_state: stale ? "unknown" : waking ? "awake" : "asleep",
+        evidence: stale ? "stale" : "positive",
+        issues: stale ? ["stale_sleep"] : [],
+        last_sleep: {
+          id: "s",
+          at: "2026-11-15T17:00Z",
+          end: waking ? "2026-11-15T18:00Z" : null,
+        },
+      });
+      const en = formatQuery(state, context);
+      assert(en.includes(waking ? "Last recorded awake at 10:00 AM." : "Last recorded asleep from 9:00 AM."), en);
+      assert(en.includes(waking ? "No sleep recorded since." : "No wake-up recorded since."), en);
+      equal(en.includes("This record may be out of date."), stale);
+      assert(!/current state|current sleep state|unconfirmed|Still marked/.test(en), en);
+      const yue = formatQuery(state, { ...context, language: "yue" });
+      assert(yue.includes(waking ? "之後未有瞓著記錄" : "之後未有醒來記錄"), yue);
+      equal(yue.includes("呢項記錄可能已經過時。"), stale);
+    }
   }
 });

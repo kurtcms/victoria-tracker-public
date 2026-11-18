@@ -2,6 +2,10 @@
 
 Run from the repository root. Export `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`. The default automated suites use mocks or disposable/synthetic data; they do not call OpenAI or access a hosted project.
 
+## Recent-event regression coverage
+
+Handler tests cover 152 combinations of diaper/feeding wording, explicit quantities/units, punctuation and now/relative extraction. Additional cases preserve calendar/clock constraints, reject unsafe/ambiguous input, validate atomic named batches and retain a sleep interval’s elapsed start when its end is “just now.” External model/database responses are mocked; these tests do not establish live model extraction or physical speech recognition.
+
 ## Backend and security
 
 ```sh

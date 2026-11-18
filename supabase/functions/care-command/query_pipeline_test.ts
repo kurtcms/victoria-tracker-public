@@ -213,10 +213,12 @@ Deno.test("unavailable or incomplete snapshots fail without answered totals or m
 // why_new=existing latest-feed flow asks time alone then a separate amount follow-up; seam=none;
 // no_claim=real provider NLU or Siri recognition (deterministic text route, mocked records).
 Deno.test("joined last-feeding time and amount questions return both recorded attributes", async () => {
-  for (const text of [
-    "When and how much was Victoria’s last feeding?",
-    "How much and when was Victoria’s last feeding?",
-  ]) {
+  for (
+    const text of [
+      "When and how much was Victoria’s last feeding?",
+      "How much and when was Victoria’s last feeding?",
+    ]
+  ) {
     const r = await run(text);
     equal(r.response.status, 200);
     equal(r.body.status, "answered");
@@ -238,19 +240,72 @@ Deno.test("native uppercase child and record UUIDs retain exact feeding context"
     { id: older, event_type: "feeding", volume_ml: 80, occurred_at: "2026-11-13T18:00Z" },
     { id: record, event_type: "feeding", volume_ml: 90, occurred_at: "2026-11-13T19:00Z" },
   ];
-  const r = await run("How much did Victoria drink?", {
-    child_id: child.toUpperCase(),
-    query_context: {
+  const r = await run(
+    "How much did Victoria drink?",
+    {
       child_id: child.toUpperCase(),
-      domain: "feeding",
-      record_id: older.toUpperCase(),
-      at: "2026-11-13T19:59:00Z",
+      query_context: {
+        child_id: child.toUpperCase(),
+        domain: "feeding",
+        record_id: older.toUpperCase(),
+        at: "2026-11-13T19:59:00Z",
+      },
     },
-  }, [], events);
+    [],
+    events,
+  );
   equal(r.response.status, 200);
   equal(r.body.status, "answered");
   equal(r.body.details.value, 80);
   equal(r.body.message, "80 millilitres.");
   equal(r.body.query_context.record_id, older);
   assert(r.calls.every((u) => !/execute_care|consume_event_budget|openai/.test(u)));
+});
+
+Deno.test("care reports exclude exact and month-only memories from details and completeness", async () => {
+  const snapshot = {
+    complete: true,
+    events: [{ id: record, event_type: "feeding", volume_ml: 80, occurred_at: "2026-11-13T18:00Z" }],
+    sleep: [{ id: "sleep", started_at: "2026-11-13T17:00Z", ended_at: "2026-11-13T18:00Z" }],
+    milestones: [
+      { id: "month", title: "Waved hello", occurred_on: "2026-11-01", date_precision: "month" },
+      { id: "day", title: "Zoo visit", occurred_on: "2026-11-13", date_precision: "day" },
+    ],
+  };
+  for (const text of ["Give me Victoria's detailed status report today", "Victoria今日詳細照顧報告"]) {
+    const result = await run(text, {}, [], [], babies, () => new Response(JSON.stringify(snapshot)));
+    equal(result.body.status, "answered");
+    equal(result.body.details.query.domain, "care");
+    equal(result.body.details.evidence, "positive");
+    equal(result.body.details.count, 2);
+    assert(result.body.details.records.every((r: { domain: string }) => r.domain !== "milestone"));
+    assert(!result.body.details.issues.includes("month_precision"));
+    assert(!/Waved hello|Zoo visit|month-only|只記低月份/.test(result.body.message), result.body.message);
+    assert(result.body.message.includes("80"), result.body.message);
+  }
+  const onlyMemories = await run(
+    "Give me Victoria's status report today",
+    {},
+    [],
+    [],
+    babies,
+    () => new Response(JSON.stringify({ ...snapshot, events: [], sleep: [] })),
+  );
+  equal(onlyMemories.body.status, "answered");
+  equal(onlyMemories.body.details.evidence, "unknown");
+  equal(onlyMemories.body.details.count, 0);
+  equal(onlyMemories.body.details.records, []);
+  assert(!onlyMemories.body.details.issues.includes("month_precision"));
+  // Explicit memory reads still retain the month-only observation.
+  const memory = await run(
+    "What was Victoria's last milestone?",
+    {},
+    [],
+    [],
+    babies,
+    () => new Response(JSON.stringify({ ...snapshot, milestones: snapshot.milestones.slice(0, 1) })),
+  );
+  equal(memory.body.status, "answered");
+  equal(memory.body.details.records[0].precision, "month");
+  assert(memory.body.message.includes("Waved hello"), memory.body.message);
 });

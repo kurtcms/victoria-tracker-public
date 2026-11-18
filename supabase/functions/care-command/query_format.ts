@@ -150,29 +150,29 @@ function sleepTotal(f: QueryFacts, c: FormatContext): string {
 function sleepState(f: QueryFacts, c: FormatContext): string {
   const r = f.last_sleep, en = c.language === "en";
   if (!r || f.issues.includes("inconsistent_sleep")) {
-    return en ? "The records do not confirm the current sleep state." : "現有記錄未能確認而家嘅睡眠狀態。";
+    return en
+      ? `I don’t have enough sleep and wake-up records to tell whether ${f.child_name} is asleep now.`
+      : `瞓著同醒來記錄不足，未能知道${f.child_name}而家係咪瞓緊。`;
   }
   const waking = !!r.end;
   const at = formatTemporal(waking ? { ...r, at: r.end! } : r, c, f.query);
   const stale = f.evidence === "stale" || f.issues.includes("stale_sleep");
   const lead = en
-    ? `Latest recorded ${waking ? "wake-up" : "sleep start"}${at ? `: ${at}` : ""}.`
-    : `最近${waking ? "醒來" : "瞓著"}記錄${at ? `係${at}` : ""}。`;
+    ? `Last recorded ${waking ? "awake" : "asleep"}${at ? ` ${waking ? "at" : "from"} ${at}` : ""}.`
+    : `上次記錄${waking ? "醒來" : "瞓著"}${at ? `係${at}` : ""}。`;
   if (!stale && f.sleep_state === "unknown") {
-    return lead + (en ? " The records do not establish the current sleep state." : "現有記錄未能確認而家嘅睡眠狀態。");
-  }
-  if (stale) {
     return lead +
       (en
-        ? `${
-          !waking ? " I don’t have a wake-up recorded." : ""
-        } This record is stale; I can’t confirm the current sleep state.`
-        : `${!waking ? "未有醒來記錄。" : ""}呢項記錄已過時，未能確認而家係咪瞓緊。`);
+        ? ` I can’t tell from the records whether ${f.child_name} is asleep now.`
+        : `未能從記錄知道${f.child_name}而家係咪瞓緊。`);
   }
-  return lead +
-    (en
-      ? ` ${waking ? "Last recorded awake" : "Still marked asleep"}; the current state is unconfirmed.`
-      : `${waking ? "上次記錄係醒咗" : "記錄顯示未瞓醒"}，實際狀態未確認。`);
+  const nextTransition = en
+    ? waking ? "No sleep recorded since." : "No wake-up recorded since."
+    : waking
+    ? "之後未有瞓著記錄。"
+    : "之後未有醒來記錄。";
+  return lead + (en ? " " : "") + nextTransition +
+    (stale ? en ? " This record may be out of date." : "呢項記錄可能已經過時。" : "");
 }
 function recordDescription(r: QueryRecord, f: QueryFacts, c: FormatContext): string {
   const q = f.query, en = c.language === "en";

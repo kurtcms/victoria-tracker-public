@@ -251,7 +251,6 @@ export function calculateQuery(q: QuerySpec, s: Snapshot, c: RequestCommand, bab
       ...dayDiapers,
       ...relevantSleep,
       ...weights.filter(dateInRange),
-      ...milestones.filter(dateInRange),
     ];
   }
   if (q.domain === "milestone" && q.topic) {

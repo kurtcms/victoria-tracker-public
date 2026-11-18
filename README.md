@@ -16,6 +16,8 @@ Siri confirms saving only after the database confirms persistence; questions ret
 
 Ask about recorded feeding, diapers, sleep, weight and milestones in English or Cantonese. Shared interpretation distinguishes current recorded state, historical events, counts, latest events, totals and elapsed time. Answers qualify missing or stale records, separate completed sleep from open sessions, and use natural units and contextual dates. Short follow-ups can refer to the exact prior feeding. See [query examples, taxonomy and limitations](docs/CONVERSATIONAL_QUERIES.md).
 
+The current source release also supports memory title/note search and sorting, clearer recorded sleep-state replies, and recent feeding descriptions such as “She had 60 mL just now.” See [changes](CHANGELOG.md) and [release status](docs/RELEASE.md).
+
 ## Demo
 
 <a href="https://github.com/user-attachments/assets/3daf4e10-2eb3-47ad-a6f9-5e00d1d11e1d">
