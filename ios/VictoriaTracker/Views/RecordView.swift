@@ -18,7 +18,6 @@ struct RecordView: View {
   @State private var title = ""
   @State private var note = ""
   @State private var precision = "day"
-  @State private var first = false
   @State private var submitted: CareCommand?
   @State private var proposal: CareResponse?
   var body: some View {
@@ -51,7 +50,7 @@ struct RecordView: View {
               Text("Fell asleep").tag("sleep_start")
               Text("Woke up").tag("sleep_end")
               Text("Past sleep").tag("sleep_interval")
-              Text("Milestone").tag("milestone")
+              Text("Memory").tag("milestone")
             }
             if kind == "feeding" || kind == "weight" {
               TextField(kind == "feeding" ? "Volume (mL)" : "Weight (kg)", text: $amount)
@@ -70,7 +69,6 @@ struct RecordView: View {
                 Text("Exact day").tag("day")
                 Text("Month only").tag("month")
               }
-              Toggle("First time", isOn: $first)
             } else if kind == "weight" {
               DatePicker(
                 "Measurement date", selection: $date, in: ...Date(), displayedComponents: .date)
@@ -156,7 +154,7 @@ struct RecordView: View {
         p.title = title
         p.note = note.isEmpty ? nil : note
         p.datePrecision = precision
-        p.isFirst = first
+        p.isFirst = false
         let day = CalendarDate.string(date, timeZone: timeZone)
         p.occurredOn = precision == "month" ? String(day.prefix(7)) + "-01" : day
       } else {

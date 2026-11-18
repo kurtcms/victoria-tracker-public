@@ -77,6 +77,35 @@ public struct Milestone: Codable, Identifiable, Equatable, Sendable {
     return f.string(from: date)
   }
 }
+public enum MemorySort: String, CaseIterable, Identifiable, Sendable {
+  case newest = "Newest first"
+  case oldest = "Oldest first"
+  case alphabetical = "Title A–Z"
+  public var id: String { rawValue }
+}
+
+extension Milestone {
+  public static func browse(
+    _ memories: [Milestone], search: String = "", sort: MemorySort = .newest
+  ) -> [Milestone] {
+    let term = search.trimmingCharacters(in: .whitespacesAndNewlines)
+    return memories.filter {
+      term.isEmpty || $0.title.localizedStandardContains(term)
+        || ($0.note?.localizedStandardContains(term) ?? false)
+    }.sorted { lhs, rhs in
+      // Month-only dates retain their stored month anchor; this is display
+      // ordering, not evidence of an exact day or first occurrence.
+      if sort != .alphabetical && lhs.occurredOn != rhs.occurredOn {
+        return sort == .newest ? lhs.occurredOn > rhs.occurredOn : lhs.occurredOn < rhs.occurredOn
+      }
+      let titleOrder = lhs.title.localizedStandardCompare(rhs.title)
+      if titleOrder != .orderedSame { return titleOrder == .orderedAscending }
+      if lhs.occurredOn != rhs.occurredOn { return lhs.occurredOn > rhs.occurredOn }
+      return lhs.id.uuidString < rhs.id.uuidString
+    }
+  }
+}
+
 public enum CalendarDate {
   public static func string(_ date: Date, timeZone: TimeZone = .current) -> String {
     let f = DateFormatter()

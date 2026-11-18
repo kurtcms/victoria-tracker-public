@@ -601,3 +601,189 @@ Deno.test("milk-only question returns only the stored milk total without trailin
   assert(!s.calls.some((c) => c.endsWith("execute_care_conversation")));
   assert(!s.calls.some((c) => c.includes("openai")));
 });
+
+Deno.test("recent had/drank statements preserve quantities and reference time through persistence", async () => {
+  const items: [string, number | null, string | null][] = [
+    ["a wet diaper", null, "wet"],
+    ["a dirty diaper", null, "dirty"],
+    ["a mixed diaper", null, "mixed"],
+    ["60ml", 60, null],
+    ["120ml", 120, null],
+    ["60 mL", 60, null],
+    ["120 mL", 120, null],
+    ["sixty mil", 60, null],
+    ["one hundred and twenty mil", 120, null],
+    ["sixty M L", 60, null],
+    ["120 millilitres", 120, null],
+  ];
+  for (const [words, volume, diaper] of items) {
+    for (const verb of diaper ? ["had"] : ["had", "drank"]) {
+      for (
+        const text of [
+          `She ${verb} ${words} just now`,
+          `She ${verb} ${words} just now.`,
+          `She ${verb} ${words} just now!`,
+          `She just ${verb} ${words}.`,
+        ]
+      ) {
+        for (const timing of ["now", "relative"]) {
+          const s = setup({
+            roster: [babies[0]],
+            expectedText: text,
+            model: extracted({
+              child_name: null,
+              action: diaper ? "diaper" : "feeding",
+              volume_ml: volume,
+              diaper_kind: diaper,
+              time_kind: timing,
+              minutes_ago: timing === "relative" ? 0 : null,
+            }),
+          });
+          // "just had" alone does not ground a model's relative zero; "just now" does.
+          const accepted = timing === "now" || text.includes("just now");
+          const body = await (await s.handler(request({ ...command, text }))).json();
+          equal(body.status, accepted ? "recorded" : "needs_clarification");
+          if (!accepted) {
+            assert(!s.calls.some((url) => url.endsWith("execute_care_conversation")));
+            continue;
+          }
+          equal(s.saved()?.p_operation, "batch");
+          equal(s.saved()?.p_payload, {
+            actions: [{
+              action: "record",
+              payload: {
+                event_type: diaper ? "diaper" : "feeding",
+                occurred_at: "2026-11-13T20:00:00.000Z",
+                volume_ml: volume,
+                diaper_kind: diaper,
+                weight_kg: null,
+              },
+            }],
+          });
+        }
+      }
+    }
+  }
+});
+
+Deno.test("recent feeding wording cannot bypass safety quantity time or baby grounding", async () => {
+  const cases: [string, Record<string, unknown>, boolean?][] = [
+    ["Did she have 60ml just now?", {}],
+    ["She had not had 60ml just now.", {}],
+    ["She didn't have 60ml just now.", {}],
+    ["If she had 60ml just now, record it.", {}],
+    ["She will have 60ml just now.", {}],
+    ["She plans to have 60ml just now.", {}],
+    ["She had 60 just now.", {}],
+    ["She had 60ml or 120ml just now.", {}],
+    ["She had 60ml just now.", { volume_ml: 120 }],
+    ["She drank 60ml just now.", { time_kind: "relative", minutes_ago: 5 }],
+    ["She drank 60ml at 9am just now.", { time_kind: "relative", minutes_ago: 0 }],
+    ["She drank 60ml yesterday, log it just now.", { time_kind: "relative", minutes_ago: 0 }],
+    ["She drank 60ml this morning just now.", { time_kind: "relative", minutes_ago: 0 }],
+    ["She had 60ml just now.", {}, true],
+    ["She had a wet diaper and 60ml just now.", {}],
+    ["She had 60ml left just now.", {}],
+  ];
+  for (const [text, patch, multiple] of cases) {
+    const s = setup({
+      roster: multiple ? babies : [babies[0]],
+      expectedText: text,
+      model: extracted({ child_name: null, volume_ml: 60, ...patch }),
+    });
+    const body = await (await s.handler(request({ ...command, text }))).json();
+    assert(["needs_clarification", "rejected"].includes(body.status));
+    assert(!s.calls.some((url) => url.endsWith("execute_care_conversation")));
+  }
+});
+
+Deno.test("named recent feeding and diaper clauses save as one batch or none", async () => {
+  const text = "Victoria had 120ml just now and had a wet diaper just now.";
+  const raw = (volume: number) => ({
+    interpretation: {
+      decision: "execute",
+      operation: "batch",
+      child_name: "Victoria",
+      language: "en",
+      evidence: text,
+      selector: null,
+      changes: null,
+      remove: null,
+      query: null,
+      actions: [
+        {
+          evidence: "Victoria had 120ml just now",
+          extraction: extracted({ volume_ml: volume, time_kind: "relative", minutes_ago: 0 }),
+        },
+        {
+          evidence: "had a wet diaper just now.",
+          extraction: extracted({
+            child_name: null,
+            action: "diaper",
+            volume_ml: null,
+            diaper_kind: "wet",
+            time_kind: "relative",
+            minutes_ago: 0,
+          }),
+        },
+      ],
+    },
+  });
+  const s = setup({ expectedText: text, model: raw(120) });
+  equal((await (await s.handler(request({ ...command, text }))).json()).status, "recorded");
+  equal(s.saved()?.p_child_id, child);
+  equal(s.saved()?.p_payload, {
+    actions: [
+      {
+        action: "record",
+        payload: {
+          event_type: "feeding",
+          occurred_at: "2026-11-13T20:00:00.000Z",
+          volume_ml: 120,
+          diaper_kind: null,
+          weight_kg: null,
+        },
+      },
+      {
+        action: "record",
+        payload: {
+          event_type: "diaper",
+          occurred_at: "2026-11-13T20:00:00.000Z",
+          volume_ml: null,
+          diaper_kind: "wet",
+          weight_kg: null,
+        },
+      },
+    ],
+  });
+  const bad = setup({ expectedText: text, model: raw(60) });
+  equal((await (await bad.handler(request({ ...command, text }))).json()).status, "needs_clarification");
+  assert(!bad.calls.some((url) => url.endsWith("execute_care_conversation")));
+});
+
+Deno.test("sleep ending just now retains its explicitly elapsed start", async () => {
+  const text = "She fell asleep 30 minutes ago and woke just now.";
+  const s = setup({
+    roster: [babies[0]],
+    expectedText: text,
+    model: extracted({
+      child_name: null,
+      action: "sleep_interval",
+      volume_ml: null,
+      time_kind: "relative",
+      minutes_ago: 30,
+      end_time_kind: "relative",
+      end_minutes_ago: 0,
+    }),
+  });
+  equal((await (await s.handler(request({ ...command, text }))).json()).status, "recorded");
+  equal(s.saved()?.p_payload, {
+    actions: [{
+      action: "sleep_interval",
+      payload: {
+        occurred_at: "2026-11-13T19:30:00.000Z",
+        ended_at: "2026-11-13T20:00:00.000Z",
+      },
+    }],
+  });
+});

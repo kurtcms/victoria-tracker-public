@@ -7,6 +7,38 @@ import XCTest
 #endif
 
 final class MilestoneGuideTests: XCTestCase {
+  func testMemorySearchAndOrderingPreserveDatesAndUseAlphabeticalTies() throws {
+    func memory(_ title: String, _ date: String, note: String? = nil,
+                precision: String = "day") throws -> Milestone {
+      var object: [String: Any] = [
+        "id": UUID().uuidString, "child_id": UUID().uuidString, "title": title,
+        "occurred_on": date, "date_precision": precision, "is_first": false,
+        "recorded_by": UUID().uuidString, "input_source": "manual",
+        "created_at": "2026-11-14T12:00:00Z", "revision": 1,
+      ]
+      if let note { object["note"] = note }
+      return try APIJSON.decoder().decode(
+        Milestone.self, from: JSONSerialization.data(withJSONObject: object))
+    }
+    let memories = try [
+      memory("Zoo visit", "2026-11-14", note: "With grandma"),
+      memory("Café outing", "2026-11-14"),
+      memory("First smile", "2026-10-01", precision: "month"),
+      memory("Apple picking", "2026-11-01"),
+    ]
+    XCTAssertEqual(Milestone.browse(memories).map(\.title),
+                   ["Café outing", "Zoo visit", "Apple picking", "First smile"])
+    XCTAssertEqual(Milestone.browse(memories, sort: .oldest).map(\.title),
+                   ["First smile", "Apple picking", "Café outing", "Zoo visit"])
+    XCTAssertEqual(Milestone.browse(memories, sort: .alphabetical).map(\.title),
+                   ["Apple picking", "Café outing", "First smile", "Zoo visit"])
+    XCTAssertEqual(Milestone.browse(memories, search: "  CAFE  ").map(\.title), ["Café outing"])
+    XCTAssertEqual(Milestone.browse(memories, search: "GRANDMA").map(\.title), ["Zoo visit"])
+    XCTAssertTrue(Milestone.browse(memories, search: "missing").isEmpty)
+    XCTAssertTrue(Milestone.browse([]).isEmpty)
+    XCTAssertEqual(Milestone.browse(memories).last?.datePrecision, "month")
+  }
+
   func testAgeUsesBirthdayAnniversariesAndUpcomingCheckpointIncludesNineMonthsAtEight() {
     let before = MilestoneGuide.ageContext(birth: "2026-03-14", today: "2026-11-13")
     XCTAssertEqual(before?.completedMonths, 7)

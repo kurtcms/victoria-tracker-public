@@ -224,11 +224,12 @@ function statedDiaper(text: string): string | undefined {
 }
 function compatibleAction(extraction: Record<string, unknown>, evidence: string): boolean {
   const action = String(extraction.action);
-  const kinds =
-    [feedingCue(evidence), diaperCue(evidence), weightCue(evidence), sleepCue(evidence)].filter(Boolean).length;
+  const feeding = feedingCue(evidence) ||
+    /\bhad\b/iu.test(evidence) && quantityMentions(evidence, "ml").length === 1;
+  const kinds = [feeding, diaperCue(evidence), weightCue(evidence), sleepCue(evidence)].filter(Boolean).length;
   if (kinds > 1) return false;
   if (action === "feeding") {
-    return feedingCue(evidence) && !correctionCue(evidence) && quantityMentions(evidence, "ml").length === 1 &&
+    return feeding && !correctionCue(evidence) && quantityMentions(evidence, "ml").length === 1 &&
       !quantities(evidence, "kg").length;
   }
   if (action === "diaper") return diaperCue(evidence) && statedDiaper(evidence) === extraction.diaper_kind;
@@ -280,7 +281,8 @@ function calendarTimeGrounded(e: Record<string, unknown>, text: string, c: Reque
   for (const prefix of ["", "end_"]) {
     const kind = e[prefix + "time_kind"], value = e[prefix + "absolute_local"];
     if (kind === null) continue;
-    if (kind === "now" && (pastDay || clockCue || unsupportedPast)) return false;
+    const atReference = kind === "now" || kind === "relative" && e[prefix + "minutes_ago"] === 0;
+    if (atReference && (pastDay || clockCue || unsupportedPast)) return false;
     if (kind === "date" && explicitDays.length && value !== explicitDays[0]) return false;
     if (kind === "absolute") {
       if (typeof value !== "string") return false;
@@ -301,7 +303,8 @@ function relativeTimeGrounded(extraction: Record<string, unknown>, evidence: str
   for (const prefix of ["", "end_"]) {
     if (extraction[prefix + "time_kind"] !== "relative") continue;
     const expected = extraction[prefix + "minutes_ago"];
-    const candidates: number[] = [];
+    // "Just now" grounds zero elapsed minutes, never an invented past offset.
+    const candidates: number[] = /\bjust now\b/iu.test(evidence) ? [0] : [];
     for (
       const match of evidence.matchAll(
         /([\p{L}\d .-]+?)\s*(minutes?|mins?|hours?|hrs?|分鐘|分鐘|小時|個鐘|鐘頭)\s*(?:ago|前)/giu,

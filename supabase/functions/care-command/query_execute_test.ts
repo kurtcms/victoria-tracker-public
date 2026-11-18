@@ -153,7 +153,7 @@ Deno.test("historical care reports expose typed detail and latest facts only thr
   assert(f.records.some((r) => r.domain === "feeding"));
   assert(f.records.some((r) => r.domain === "sleep"));
   assert(f.records.some((r) => r.domain === "weight"));
-  assert(f.records.some((r) => r.domain === "milestone"));
+  assert(!f.records.some((r) => r.domain === "milestone"));
   equal(f.completed_minutes, 0);
   equal(f.open_minutes, 60);
 });
@@ -333,5 +333,25 @@ Deno.test("explicit first selector applies to amounts as well as timestamps", ()
     equal(f.query.operation, "first");
     equal(f.records[0].id, "first");
     equal(f.value, 30);
+  }
+});
+
+Deno.test("sleep records become stale strictly after six hours and wake-up resets the clock", () => {
+  const reference = Date.parse(c.reference_at);
+  for (const ended of [false, true]) {
+    for (const secondsAgo of [6 * 3600, 6 * 3600 + 1]) {
+      const transition = new Date(reference - secondsAgo * 1000).toISOString();
+      const snapshot = {
+        ...base,
+        sleep: [{
+          id: "s",
+          started_at: ended ? new Date(reference - (secondsAgo + 3600) * 1000).toISOString() : transition,
+          ended_at: ended ? transition : null,
+        }],
+      };
+      const result = run("Is she sleeping?", snapshot);
+      equal(result.issues.includes("stale_sleep"), secondsAgo > 6 * 3600);
+      equal(result.sleep_state, secondsAgo > 6 * 3600 ? "unknown" : ended ? "awake" : "asleep");
+    }
   }
 });

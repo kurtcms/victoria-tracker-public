@@ -17,6 +17,8 @@ A single `QuerySpec` composes these dimensions, rather than adding a handler per
 | Scope | All history, calendar day, morning, afternoon, tonight/evening, rolling minutes, since last feeding, before/after an identified sleep |
 | Presentation | Brief/detailed, time/amount focus, exact date/timestamp, metric/US units, spoken/visual |
 
+Care/status reports exclude memories, including detailed records and month-precision completeness checks. Ask about memories explicitly to retrieve them. Sleep-state replies say “Last recorded asleep from…” or “Last recorded awake at…” and identify the missing next record. “This record may be out of date” appears only when the last sleep start or wake-up is more than six hours old; this is a product heuristic, not a clinical threshold. Replies do not verify the baby's state now.
+
 English/Cantonese/code-switched semantic cues compose the same intents: pee/number one/wet and poop/number two/dirty select diaper subtypes. A mixed diaper contributes to each subtype once and to the change count once. Sleeping/napping/up select state; slept/napped select existence; “how long since” selects elapsed rather than duration. Milestone topics retain the parent's actual contiguous wording, with conservative English inflection matching; they never match an unrelated milestone merely because it is recent.
 
 ## Architecture

@@ -147,7 +147,7 @@ struct EditCareView: View {
             if hasEnd { DatePicker("Woke up", selection: $end, in: ...Date()) }
           }
           if milestone != nil {
-            TextField("Milestone", text: $title)
+            TextField("Memory", text: $title)
             TextField("Note (optional)", text: $note, axis: .vertical)
             DatePicker("Date", selection: $date, in: ...Date(), displayedComponents: .date)
             Picker("Date precision", selection: $precision) {

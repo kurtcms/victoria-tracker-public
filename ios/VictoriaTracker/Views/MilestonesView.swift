@@ -5,6 +5,11 @@ struct MilestonesView: View {
   @State private var recording = false
   @State private var editing: Milestone?
   @State private var showingGuide = false
+  @State private var search = ""
+  @State private var sort: MemorySort = .newest
+  private var memories: [Milestone] {
+    Milestone.browse(model.milestones, search: search, sort: sort)
+  }
   var body: some View {
     Group {
       if let child = model.child {
@@ -18,17 +23,29 @@ struct MilestonesView: View {
           } else {
             List {
               Section(child.name) {
-                Button("Record a milestone", systemImage: "plus.circle") { recording = true }
+                Button("Record a memory", systemImage: "plus.circle") { recording = true }
+              }
+              Section {
+                TextField("Search memories", text: $search)
+                  .autocorrectionDisabled()
+                  .accessibilityLabel("Search memory titles and notes")
+                Picker("Sort", selection: $sort) {
+                  ForEach(MemorySort.allCases) { order in
+                    Text(order.rawValue).tag(order)
+                  }
+                }
               }
               if model.milestones.isEmpty {
                 Section {
                   ContentUnavailableView(
-                    "Little firsts, kept here", systemImage: "sparkles",
+                    "Memories, kept here", systemImage: "sparkles",
                     description: Text(
                       "Add a memory whenever it happens. There’s no daily milestone target."))
                 }
+              } else if memories.isEmpty {
+                ContentUnavailableView.search(text: search)
               } else {
-                ForEach(model.milestones) { milestone in
+                ForEach(memories) { milestone in
                   Button {
                     editing = milestone
                   } label: {

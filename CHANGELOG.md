@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.0] - 2026-11-18
+
+### Added
+
+- Search memory titles and notes; browse newest first, oldest first or A–Z, with stable alphabetical ordering for matching dates.
+
+### Improved
+
+- Use “Record a memory” and “Memory” without a first-time option; preserve existing stored flags and month-only dates.
+- Keep memories out of care/status reports while retaining explicit memory questions.
+- Explain the last recorded sleep/wake transition and missing next record in English and Cantonese; flag records older than six hours.
+
+### Fixed
+
+- Accept “She had 60 mL just now” and equivalent diaper/feeding descriptions with exact amounts and atomic saves.
+- Ground “just now” as zero elapsed minutes without replacing an explicitly spoken clock or earlier date.
+
 ## [1.1.0] - 2026-11-15
 
 ### Added
