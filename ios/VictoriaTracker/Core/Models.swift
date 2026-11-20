@@ -37,6 +37,7 @@ public struct Child: Codable, Identifiable, Equatable, Sendable {
   public let name: String
   public let timeZone: String
   public var dateOfBirth: String? = nil
+  public var voicePronoun: String? = nil
   public var growthReferenceSex: String? = nil
   public var growthReferenceConfirmed: Bool? = nil
   public var wasPremature: Bool? = nil
@@ -48,6 +49,7 @@ public struct Child: Codable, Identifiable, Equatable, Sendable {
     case name
     case timeZone = "time_zone"
     case dateOfBirth = "date_of_birth"
+    case voicePronoun = "voice_pronoun"
     case growthReferenceSex = "growth_reference_sex"
     case growthReferenceConfirmed = "growth_reference_confirmed"
     case wasPremature = "was_premature"

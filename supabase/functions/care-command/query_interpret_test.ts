@@ -208,3 +208,65 @@ Deno.test("explicit metric unit requests carry presentation overrides just like 
     equal(q.unit, unit);
   }
 });
+
+Deno.test("last-event verbs compose time-focused reads across care domains and memory topics", () => {
+  for (
+    const [verb, domain, subtype, topic] of [
+      ["pee", "diaper", "wet", undefined],
+      ["poop", "diaper", "dirty", undefined],
+      ["eat", "feeding", "all", undefined],
+      ["drink", "feeding", "all", undefined],
+      ["feed", "feeding", "all", undefined],
+      ["sleep", "sleep", "start", undefined],
+      ["fall asleep", "sleep", "start", undefined],
+      ["wake up", "sleep", "wake", undefined],
+      ["nap", "sleep", "nap", undefined],
+      ["weigh", "weight", "all", undefined],
+      ["clap hands", "milestone", "all", "clap hands"],
+      ["say papa", "milestone", "all", "say papa"],
+    ] as const
+  ) {
+    const text = `When did she last ${verb}?`;
+    const q = interpretReadQuery(text, c);
+    assert(q, text);
+    equal([q.domain, q.operation, q.subtype, q.focus, q.period, q.topic], [
+      domain,
+      "latest",
+      subtype,
+      "time",
+      "all",
+      topic,
+    ]);
+  }
+  equal(interpretReadQuery("When did she last clap hands yesterday?", c)?.day, "2026-11-12");
+  equal(interpretReadQuery("When did she last clap hands yesterday?", c)?.topic, "clap hands");
+  equal(interpretReadQuery("佢上次拍手係幾時？", c)?.topic, "拍手");
+  for (
+    const text of [
+      "When did she last pee and eat?",
+      "When did she last pee? Record a feed.",
+      "When did she last clap hands last week?",
+      "When did she last clap hands tomorrow?",
+    ]
+  ) equal(interpretReadQuery(text, c), undefined);
+});
+
+Deno.test("latest memory subjects stay separate from temporal selectors and event anchors", () => {
+  const rolling = interpretReadQuery("Did she smile in the last three hours?", c);
+  assert(rolling);
+  equal([rolling.topic, rolling.operation, rolling.period, rolling.minutes], ["smile", "exists", "rolling", 180]);
+  const weekday = interpretReadQuery("When did she last clap hands last Monday?", c);
+  assert(weekday);
+  equal([weekday.topic, weekday.day], ["clap hands", "2026-11-09"]);
+  for (
+    const [text, topic, period] of [
+      ["When did she last clap hands before her nap?", "clap hands", "before_sleep"],
+      ["When did she last say papa since her feeding?", "say papa", "since_feeding"],
+    ] as const
+  ) {
+    const q = interpretReadQuery(text, c);
+    assert(q, text);
+    equal([q.domain, q.topic, q.operation, q.period], ["milestone", topic, "latest", period]);
+  }
+  equal(interpretReadQuery("When did she last feed before her nap?", c)?.domain, "feeding");
+});

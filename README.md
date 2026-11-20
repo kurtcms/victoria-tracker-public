@@ -96,7 +96,7 @@ supabase functions deploy record-event --remote="$VT_PROJECT_REF" --use-api
 
 Replace `YOUR_PROJECT_REF` with the project reference from its dashboard. Interactive hosted commands ask for confirmation. All post-migration checks must pass. **Never run `supabase/tests/*.sql` on a hosted project.** Those are destructive fixtures for disposable local databases.
 
-The source has six migration files in filename order: the original three, `202611140001_voice_care.sql`, `202611150001_care_queries.sql`, then `202611160001_read_snapshot.sql`. Apply all six to a fresh project before deploying the functions, then treat them as immutable. Preserve them unchanged after application; future schema changes need a new migration. `care-command` handles current app actions. `record-event` is retained for older pending entries and shared validation code. Both have **`verify_jwt=true`** and independently authenticate the signed-in user; do not deploy with verification disabled.
+The source has seven migration files in filename order: the original three, `202611140001_voice_care.sql`, `202611150001_care_queries.sql`, `202611160001_read_snapshot.sql`, then `202611190001_voice_pronouns.sql`. Apply all seven to a fresh project before deploying the functions, then treat them as immutable. Preserve them unchanged after application; future schema changes need a new migration. `care-command` handles current app actions. `record-event` is retained for older pending entries and shared validation code. Both have **`verify_jwt=true`** and independently authenticate the signed-in user; do not deploy with verification disabled.
 
 There is deliberately no OpenAI key yet. Account/family setup and manual recording work without OpenAI; natural-language recording will work after step 5.
 
@@ -173,7 +173,7 @@ Sign in and open the dashboard once. Enable Siri and any Victoria Tracker permis
 3. Wait for confirmation, then check Day and Supabase’s `public.events` table: exactly one feeding, 180 mL, the correct child and recording parent.
 4. On the other parent’s phone, open the same child and pull to refresh. The same entry should appear once.
 
-Siri may display a confirmation silently according to its response settings. Enable **Always Show Request** and **Always Show Siri Captions** under Siri Responses to show speech; choose spoken responses if desired. With multiple babies, include the name; an omitted name asks for clarification. UI selection does not substitute for the spoken name.
+Siri may display a confirmation silently according to its response settings. Enable **Always Show Request** and **Always Show Siri Captions** under Siri Responses to show speech; choose spoken responses if desired. With one baby, “She just drank 160ml” and “He pooped/peed just now” target that baby. Set **Family → Edit baby → Voice pronoun** for multiple babies: a simple recording can use she/he only when every active profile has a configured pronoun and exactly one matches. Ambiguous, unset or complex descriptions ask for a name. Questions and corrections still need a profile name with multiple babies. WHO charts and dashboard selection do not choose a voice target.
 
 After the prompt you can describe one to five events for the same baby, ask about saved records or daily totals, or request a correction/deletion of the latest qualifying record. Every edit or deletion needs a separate confirmation. `mil` is accepted as mL for recording; ounce recording is unsupported. Read responses can display approximate US units when explicitly requested. In the Milestones **Age guide**, tap the title/check button to record today, or a checked item to review removal. **Choose an earlier date** remains available; source links sit in checkpoint descriptions. The [source notes](docs/MILESTONE_SOURCES.md) explain the checkpoint ages.
 
@@ -209,7 +209,7 @@ The checked-in Xcode project is ready to open. After adding/removing sources/res
 
 ```text
 ios/         SwiftUI app, App Intents, resources and Xcode project
-supabase/    Five immutable migrations, two Edge Functions, local tests
+supabase/    Seven additive migrations, two Edge Functions, local tests
 tests/       Swift and Python tests
 scripts/     Project/assets generation, security and database checks
 docs/        Architecture, API, security, Siri, testing and release status

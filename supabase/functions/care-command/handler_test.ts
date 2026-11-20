@@ -55,7 +55,7 @@ function setup(
   options: {
     auth?: number;
     anonymous?: boolean;
-    roster?: typeof babies;
+    roster?: import("./domain.ts").Baby[];
     prior?: unknown;
     model?: unknown;
     providerFailure?: boolean;
@@ -125,7 +125,7 @@ function setup(
             proposal_id: proposal,
             child_id: child,
           }
-          : { status: "recorded", message: "Recorded.", event_id: event, child_id: child }),
+          : { status: "recorded", message: "Recorded.", event_id: event, child_id: saved?.p_child_id }),
         options.rpcStatus ?? 200,
       );
     }
@@ -786,4 +786,72 @@ Deno.test("sleep ending just now retains its explicitly elapsed start", async ()
       },
     }],
   });
+});
+
+Deno.test("pronoun recordings persist the authorized target and exact event before confirming", async () => {
+  const roster: import("./domain.ts").Baby[] = [
+    { ...babies[0], voice_pronoun: "she" },
+    { ...babies[1], voice_pronoun: "he" },
+  ];
+  for (const [subject, target] of [["She", babies[0].id], ["He", babies[1].id]]) {
+    for (
+      const [phrase, action, diaper_kind] of [
+        ["just drank 160ml", "feeding", null],
+        ["pooped just now", "diaper", "dirty"],
+        ["peed just now", "diaper", "wet"],
+      ]
+    ) {
+      const text = `${subject} ${phrase}.`;
+      const model = extracted({ child_name: null, action, diaper_kind, volume_ml: action === "feeding" ? 160 : null });
+      const s = setup({ roster, expectedText: text, model });
+      const response = await s.handler(request({ ...command, text, child_id: babies[0].id }));
+      equal((await response.json()).status, "recorded");
+      equal(s.saved()?.p_child_id, target);
+      equal(s.saved()?.p_payload, {
+        actions: [{
+          action: "record",
+          payload: {
+            event_type: action,
+            occurred_at: now.toISOString(),
+            volume_ml: action === "feeding" ? 160 : null,
+            diaper_kind,
+            weight_kg: null,
+          },
+        }],
+      });
+      assert(s.calls.some((url) => url.includes("select=id,name,voice_pronoun")));
+      const failed = setup({ roster, expectedText: text, model, rpcStatus: 503 });
+      const failedResponse = await failed.handler(request({ ...command, text }));
+      assert(failedResponse.status >= 400);
+      assert((await failedResponse.json()).status !== "recorded");
+    }
+  }
+});
+
+Deno.test("ambiguous pronouns and non-events never write despite a model recording decision", async () => {
+  const profiles: import("./domain.ts").Baby[] = [
+    { ...babies[0], voice_pronoun: "she" },
+    { ...babies[1], voice_pronoun: "he" },
+  ];
+  for (
+    const [text, roster] of [
+      ["She peed.", profiles.map((b) => ({ ...b, voice_pronoun: "she" as const }))],
+      ["She peed.", [profiles[0], { ...profiles[1], voice_pronoun: null }]],
+      ["She peed and he pooped.", profiles],
+      ["Did she pee?", profiles],
+      ["He did not pee.", profiles],
+      ["If he peed, record it.", profiles],
+      ["He will pee.", profiles],
+    ] as const
+  ) {
+    const s = setup({
+      roster: [...roster],
+      expectedText: text,
+      model: extracted({ child_name: null, action: "diaper", diaper_kind: "wet", volume_ml: null }),
+    });
+    const response = await s.handler(request({ ...command, text, child_id: child }));
+    assert((await response.json()).status !== "recorded");
+    assert(!s.saved());
+    assert(!s.calls.some((url) => url.endsWith("execute_care_conversation")));
+  }
 });

@@ -1,6 +1,6 @@
-import { conversationSchema, interpretConversation, knownCareQuery } from "./conversation.ts";
+import { conversationSchema, interpretConversation, knownCareQuery, resolveBaby } from "./conversation.ts";
 import { assert, babies, child, command, equal, extracted, now, second, throws } from "./test_helpers.ts";
-import { parse } from "./domain.ts";
+import { type Baby, parse } from "./domain.ts";
 
 const selector = (patch: Record<string, unknown> = {}) => ({
   kind: "feeding",
@@ -60,6 +60,49 @@ const question = (text: string, kind = "last_feeding", day: string | null = null
     actions: null,
     query: { kind, day },
   });
+
+Deno.test("single-baby pronouns record drank, pooped and peed just now", () => {
+  for (const pronoun of ["She", "He"]) {
+    for (
+      const [phrase, action, diaper_kind] of [
+        ["just drank 160ml", "feeding", null],
+        ["pooped just now", "diaper", "dirty"],
+        ["peed just now", "diaper", "wet"],
+      ] as const
+    ) {
+      const text = `${pronoun} ${phrase}.`;
+      const result = run(
+        envelope({
+          child_name: null,
+          evidence: text,
+          actions: [{
+            evidence: text,
+            extraction: extracted({
+              child_name: null,
+              action,
+              diaper_kind,
+              volume_ml: action === "feeding" ? 160 : null,
+            }),
+          }],
+        }),
+        text,
+        [babies[0]],
+      );
+      assert("operation" in result, text);
+      equal(result.child_id, child);
+      equal(result.payload.actions, [{
+        action: "record",
+        payload: {
+          event_type: action,
+          occurred_at: now.toISOString(),
+          volume_ml: action === "feeding" ? 160 : null,
+          diaper_kind,
+          weight_kg: null,
+        },
+      }]);
+    }
+  }
+});
 
 Deno.test("one utterance resolves one explicitly named baby and atomically preserves all event clauses", () => {
   const text = "Victoria drank 180 mil and had a wet diaper.";
@@ -690,5 +733,84 @@ Deno.test("direct queries never discard events, assume a baby or reinterpret a n
 Deno.test("report extraction cannot discard a requested write or pretend a plan is a question", () => {
   for (const text of ["Care report, Victoria and log a wet diaper", "Status report, Victoria then record 80 mil"]) {
     clarification(question(text, "care_report"), text);
+  }
+});
+
+Deno.test("recording pronouns use only unambiguous configured profiles", () => {
+  const profiles: Baby[] = [{ ...babies[0], voice_pronoun: "she" }, { ...babies[1], voice_pronoun: "he" }];
+  const resolve = (text: string, roster = profiles, name: unknown = null) => resolveBaby(text, name, roster, true)?.id;
+  equal(resolve("She just drank 160ml."), child);
+  equal(resolve("He's just peed."), second);
+  equal(resolve("SHE pooped."), child);
+  equal(resolve("She drank 160ml.", profiles, "Oliver"), undefined);
+  equal(resolve("She drank 160ml.", profiles, "Victoria"), undefined);
+  equal(resolve("She peed.", profiles.map((b) => ({ ...b, voice_pronoun: "she" }))), undefined);
+  equal(resolve("He peed.", profiles.map((b) => ({ ...b, voice_pronoun: "she" }))), undefined);
+  equal(resolve("She peed.", [{ ...profiles[0] }, { ...profiles[1], voice_pronoun: null }]), undefined);
+  equal(resolve("They peed."), undefined);
+  equal(resolve("佢尿尿"), undefined);
+  equal(resolve("She peed and he pooped."), undefined);
+  equal(resolve("Victoria peed and he pooped."), undefined);
+  equal(resolve("Victoria peed and she pooped."), child);
+  equal(resolve("Victoria peed.", [{ ...profiles[0], voice_pronoun: null }, profiles[1]]), child);
+  equal(resolve("Just drank 160ml."), undefined);
+  equal(resolveBaby("Has she peed?", null, profiles), undefined);
+  equal(resolveBaby("Change her last feed to 160ml.", null, profiles), undefined);
+});
+
+Deno.test("unique pronoun batches route all events to that profile without a model-inferred name", () => {
+  const profiles: Baby[] = [{ ...babies[0], voice_pronoun: "she" }, { ...babies[1], voice_pronoun: "he" }];
+  for (const [subject, expected] of [["She", child], ["He", second]]) {
+    const text = `${subject} drank 160ml and peed just now.`;
+    const raw = envelope({
+      child_name: null,
+      evidence: text,
+      actions: [
+        { evidence: `${subject} drank 160ml`, extraction: extracted({ child_name: null, volume_ml: 160 }) },
+        {
+          evidence: "peed just now.",
+          extraction: extracted({ child_name: null, action: "diaper", volume_ml: null, diaper_kind: "wet" }),
+        },
+      ],
+    });
+    const result = run(raw, text, profiles);
+    assert("operation" in result);
+    equal(result.child_id, expected);
+    equal((result.payload.actions as unknown[]).length, 2);
+  }
+});
+
+Deno.test("pronoun-only multi-baby recordings clarify unknown and nested subjects", () => {
+  const profiles: Baby[] = [{ ...babies[0], voice_pronoun: "she" }, { ...babies[1], voice_pronoun: "he" }];
+  for (
+    const clauses of [
+      ["She peed", "Emma pooped."],
+      ["Emma peed", "she pooped."],
+      ["She and Emma peed."],
+      ["Emma said she peed."],
+      ["She said Emma peed."],
+      ["She peed while Emma pooped."],
+    ]
+  ) {
+    const text = clauses.join(" and ");
+    const result = run(
+      envelope({
+        child_name: null,
+        evidence: text,
+        actions: clauses.map((evidence) => ({
+          evidence,
+          extraction: extracted({
+            child_name: null,
+            action: "diaper",
+            volume_ml: null,
+            diaper_kind: evidence.includes("pooped") ? "dirty" : "wet",
+          }),
+        })),
+      }),
+      text,
+      profiles,
+    );
+    assert("status" in result, text);
+    equal(result.status, "needs_clarification");
   }
 });

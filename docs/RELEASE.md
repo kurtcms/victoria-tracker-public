@@ -1,5 +1,9 @@
 # Release status
 
+## v1.3.0 — pronoun recordings
+
+Adds separate optional voice pronouns, deterministic recording targets and peed/pooped wording. Existing profiles stay unspecified. Multi-baby questions/corrections still use profile names. Automated fixtures do not establish physical recognition or paid-model accuracy. Source publication, backend deployment and build-18 installation evidence is pending until verified.
+
 ## v1.2.1 — iOS 1.0 (17)
 
 This documentation-only patch corrects stale release/version claims and clarifies historical Siri acceptance. App and backend source are unchanged from v1.2.0, which improved recent-event recording, memory browsing and recorded sleep-state replies. It retains conversational recorded-care queries across feeding, diapers, sleep, weight and milestones. Configure your own backend, Auth and development signing through [README](../README.md). No hosted service access, family accounts, signing credentials or App Store/TestFlight binary is included.
@@ -28,8 +32,8 @@ Historical bounded physical checks are documented in [acceptance coverage](ACCEP
 
 Siri uses a short trigger followed by a prompted description. Unrestricted trailing speech inside one App Shortcut utterance is not promised. Recording requires internet access; uncertain submissions retry the original prepared request rather than creating a general offline queue. The app UI is English; Cantonese recognition depends on the phone's configured Siri language.
 
-Multiple babies require an explicit spoken profile name; selection or follow-up context cannot replace it. Batches validate/save atomically, and edits/deletions need separate confirmation. Context is in-memory and expires after ten minutes. Naps are defined by local start time because no nap label is stored. Offered/remaining/estimated milk observations and broad semantic milestone matching are not stored or inferred. Incomplete snapshots fail explicitly above 10,000 records per domain. Growth charts make no medical conclusions.
+With multiple babies, simple recordings accept one unique configured she/he pronoun when all active profiles have settings; ambiguous or complex descriptions need a name. Questions/corrections require an explicit profile name. Selection or follow-up context cannot replace a voice target. Batches validate/save atomically, and edits/deletions need separate confirmation. Context is in-memory and expires after ten minutes. Naps are defined by local start time because no nap label is stored. Offered/remaining/estimated milk observations and broad semantic milestone matching are not stored or inferred. Incomplete snapshots fail explicitly above 10,000 records per domain. Growth charts make no medical conclusions.
 
 ## Backend upgrades
 
-Apply all six migrations in filename order before deploying the matching functions. The new `202611160001_read_snapshot.sql` adds a stable security-invoker snapshot under caller RLS. Preserve all previously applied migration bytes and legacy RPC contracts. Keep gateway JWT verification enabled and the `private` schema unexposed. Run the read-only post-migration checks; never run destructive SQL fixtures on a hosted database. [API](CARE_API.md), [security](SECURITY_AUDIT.md)
+Apply all seven migrations in filename order before deploying the matching functions. `202611190001_voice_pronouns.sql` adds the optional profile pronoun and compatible save RPC; `202611160001_read_snapshot.sql` adds a stable security-invoker snapshot under caller RLS. Preserve all previously applied migration bytes and legacy RPC contracts. Keep gateway JWT verification enabled and the `private` schema unexposed. Run the read-only post-migration checks; never run destructive SQL fixtures on a hosted database. [API](CARE_API.md), [security](SECURITY_AUDIT.md)

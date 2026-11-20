@@ -355,3 +355,19 @@ Deno.test("sleep records become stale strictly after six hours and wake-up reset
     }
   }
 });
+
+Deno.test("latest arbitrary memory topics select matching history and retain date precision", () => {
+  const snapshot = {
+    ...base,
+    milestones: [
+      { id: "old", title: "Clap hands", occurred_on: "2026-09-01", date_precision: "day" },
+      { id: "latest", title: "Clap hands", occurred_on: "2026-10-01", date_precision: "month" },
+      { id: "unrelated", title: "Zoo visit", occurred_on: "2026-11-13", date_precision: "day" },
+    ],
+  };
+  const facts = run("When did she last clap hands?", snapshot);
+  equal(facts.records.map((r) => r.id), ["latest"]);
+  equal(facts.records[0].precision, "month");
+  equal(facts.records[0].at, undefined);
+  equal(run("When did she last say papa?", snapshot).evidence, "unknown");
+});

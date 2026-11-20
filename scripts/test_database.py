@@ -53,6 +53,7 @@ try:
     print("PASS: read-only preflight detects an already occupied project")
     sql((root / "supabase/tests/security.sql").read_text())
     sql((root / "supabase/tests/expanded.sql").read_text())
+    sql((root / "supabase/tests/voice_pronouns.sql").read_text())
     sql((root / "supabase/tests/conversation.sql").read_text())
     sql((root / "supabase/tests/care_queries.sql").read_text())
     sql((root / "supabase/tests/read_snapshot.sql").read_text())
