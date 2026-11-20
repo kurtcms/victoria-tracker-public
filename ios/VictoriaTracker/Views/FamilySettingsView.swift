@@ -94,6 +94,7 @@ struct ChildProfileView: View {
   @State private var hasBirth = false
   @State private var birth = Date()
   @State private var sex = ""
+  @State private var voicePronoun = ""
   @State private var premature = "unknown"
   @State private var archiveConfirm = false
   @State private var loaded = false
@@ -102,10 +103,15 @@ struct ChildProfileView: View {
       Form {
         Section("Baby") {
           TextField("Name", text: $name).textContentType(.givenName)
-          if model.children.count > 1 {
-            Text("Use this name in voice recordings to choose this baby.")
-              .font(.footnote).foregroundStyle(.secondary)
+          Picker("Voice pronoun", selection: $voicePronoun) {
+            Text("Unspecified").tag("")
+            Text("She").tag("she")
+            Text("He").tag("he")
           }
+          Text(
+            "With one baby, either pronoun chooses that baby. With multiple babies, use a name or an unambiguous configured pronoun. Unset or shared pronouns may need clarification."
+          )
+          .font(.footnote).foregroundStyle(.secondary)
         }
         Section("Growth profile (optional)") {
           Toggle("Add date of birth", isOn: $hasBirth)
@@ -173,6 +179,7 @@ struct ChildProfileView: View {
         if let existing {
           name = existing.name
           sex = existing.growthReferenceSex ?? ""
+          voicePronoun = existing.voicePronoun ?? ""
           if let value = existing.dateOfBirth, let d = CalendarDate.localDate(value) {
             hasBirth = true
             birth = d
@@ -192,7 +199,8 @@ struct ChildProfileView: View {
         existing, name: name.trimmingCharacters(in: .whitespacesAndNewlines),
         birthDate: hasBirth ? CalendarDate.string(birth) : nil,
         referenceSex: sex.isEmpty ? nil : sex, referenceConfirmed: !sex.isEmpty,
-        wasPremature: premature == "unknown" ? nil : premature == "yes", archive: archive)
+        wasPremature: premature == "unknown" ? nil : premature == "yes",
+        voicePronoun: voicePronoun.isEmpty ? nil : voicePronoun, archive: archive)
     }
     if model.error == nil { dismiss() }
   }

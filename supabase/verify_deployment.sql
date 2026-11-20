@@ -17,7 +17,7 @@ with expected_tables(schema_name, relation_name) as (
   select p.* from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where (n.nspname='public' and p.proname in
     ('create_family','create_family_v2','create_family_invite','join_family',
-     'consume_event_budget','record_event','save_child','execute_care_command','execute_care_conversation'))
+     'consume_event_budget','record_event','save_child','save_child_with_pronoun','execute_care_command','execute_care_conversation'))
     or (n.nspname='private' and p.proname='is_family_member')
 )
 select 'all_tables_present_with_rls' as check_name,count(*)=11 and bool_and(relrowsecurity) as ok from app_tables
@@ -38,11 +38,11 @@ union all
 select 'private_table_read_denied',not exists(
   select 1 from app_tables where schema_name='private' and has_table_privilege('authenticated',oid,'SELECT'))
 union all
-select 'security_definers_have_empty_search_path',count(*)=10 and bool_and(prosecdef and proconfig @> array['search_path=""']) from app_rpcs
+select 'security_definers_have_empty_search_path',count(*)=11 and bool_and(prosecdef and proconfig @> array['search_path=""']) from app_rpcs
 union all
 select 'anonymous_rpc_execute_denied',not exists(select 1 from app_rpcs where has_function_privilege('anon',oid,'EXECUTE'))
 union all
-select 'authenticated_rpc_execute_granted',count(*)=10 and bool_and(has_function_privilege('authenticated',oid,'EXECUTE')) from app_rpcs
+select 'authenticated_rpc_execute_granted',count(*)=11 and bool_and(has_function_privilege('authenticated',oid,'EXECUTE')) from app_rpcs
 union all
 select 'private_validators_not_client_callable',count(*)=5 and bool_and(
   not has_function_privilege('authenticated',p.oid,'EXECUTE') and not has_function_privilege('anon',p.oid,'EXECUTE'))
@@ -62,4 +62,9 @@ select 'read_snapshot_invoker_secured',count(*)=1 and bool_and(not p.prosecdef a
   and has_function_privilege('authenticated',p.oid,'EXECUTE')
   and not has_function_privilege('anon',p.oid,'EXECUTE'))
 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-where n.nspname='public' and p.proname='read_care_snapshot';
+where n.nspname='public' and p.proname='read_care_snapshot'
+union all
+select 'voice_pronoun_schema_recorded',
+  exists(select 1 from information_schema.columns where table_schema='public' and table_name='children'
+    and column_name='voice_pronoun' and data_type='text' and is_nullable='YES')
+  and exists(select 1 from supabase_migrations.schema_migrations where version='202611190001');

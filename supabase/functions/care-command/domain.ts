@@ -11,7 +11,7 @@ import {
   validatePayload,
 } from "../record-event/domain.ts";
 export { APIError, interpretationUnavailableMessage, object };
-export type Baby = { id: string; name: string };
+export type Baby = { id: string; name: string; voice_pronoun?: "she" | "he" | null };
 export type RequestCommand = {
   request_id: string;
   reference_at: string;

@@ -148,10 +148,10 @@ Authorized baby profile names: ${
     JSON.stringify(babies.map((b) => b.name))
   }. Reference UTC: ${command.reference_at}; phone timezone: ${command.time_zone}; captured offset seconds: ${command.utc_offset_seconds}; phone calendar date: ${
     phoneDate(command.reference_at, command)
-  }. The captured phone context is authoritative. Never translate or invent an authorized name. child_name is an exactly spoken authorized name, or null when omitted. With multiple babies the original utterance must explicitly name exactly one; dashboard selection is not a name.
+  }. The captured phone context is authoritative. Never translate or invent an authorized name. child_name is an exactly spoken authorized name, or null when omitted. For recordings (operation=batch), omitted names including she/he stay null: the server resolves a sole baby or an unambiguous configured she/he pronoun. Never infer a profile name from a pronoun, gender, WHO chart or dashboard selection. With multiple babies, queries and corrections must explicitly name exactly one; uncertain recording targets clarify.
 Return the interpretation inside the root {interpretation: ...} object. Every schema field is required. Null all fields unrelated to the selected operation. evidence copies the ENTIRE original input exactly, including punctuation. language=yue for Cantonese/Chinese and en otherwise. decision=execute for a supported actual event, explicit correction/deletion request, or supported care-record question. decision=clarify for ambiguous/unsupported input, decision=reject for negated/hypothetical/advice/example/future statements, with operation/actions/selector/changes/remove/query all null. Questions are read-only query operations, NEVER events. Never infer an event from a question, negation, plan or quotation.
 operation=batch: actions is one to five entries, all for the same baby, each {evidence,extraction}. Each evidence is an exact contiguous ORIGINAL clause in original order. Cover every event clause; do not omit a difficult part or duplicate a clause. Connector words may be excluded. extraction uses decision=record and one of feeding/diaper/weight/sleep_start/sleep_end/sleep_interval/milestone. All unrelated extraction fields are null. is_first MUST be null for feeding, diaper, weight and sleep; for milestones it is true only when explicitly first and false otherwise. Never copy another clause’s values into an extraction. Never put a query, edit or deletion into a batch. Multiple clauses save together only after every part validates.
-Feeding uses explicit volume_ml; mL, ml, mil, m l, m.l., spoken letters em el and 毫升 mean millilitres. Milk/million are not units. Weight uses explicit kilograms/kg/公斤/千克. Ounces/安士 are unsupported: clarify. Never choose default quantities or infer bottle intake from spillage. Chinese numbers include 一百八十=180, 一百零八=108, 兩百零五=205, 廿五=25, 七點五=7.5. Shortened 一百八/兩百五 are ambiguous: clarify. Ground each quantity in its own clause. Diaper 濕尿片/尿尿=wet, 大便/便便=dirty, both=mixed. Same-event immediate self-correction is one event with final stated details; ambiguity clarifies.
+Feeding uses explicit volume_ml; mL, ml, mil, m l, m.l., spoken letters em el and 毫升 mean millilitres. Milk/million are not units. Weight uses explicit kilograms/kg/公斤/千克. Ounces/安士 are unsupported: clarify. Never choose default quantities or infer bottle intake from spillage. Chinese numbers include 一百八十=180, 一百零八=108, 兩百零五=205, 廿五=25, 七點五=7.5. Shortened 一百八/兩百五 are ambiguous: clarify. Ground each quantity in its own clause. Diaper pee/peed/濕尿片/尿尿=wet, poop/pooped/poo/pooed/大便/便便=dirty, both=mixed. Same-event immediate self-correction is one event with final stated details; ambiguity clarifies.
 Times: an event cannot be after the reference even by seconds. No reported time means now. minutes_ago is nonnegative for elapsed past times; half an hour=30, 五分鐘前=5. Absolute times are LOCAL YYYY-MM-DDTHH:mm:ss without a zone suffix; never compute UTC yourself. Specify the reported clock and correct phone-local date; do not replace yesterday/琴日 or a clock with now. Ambiguous clocks/dates clarify. Sleep 瞓著/瞓咗/睡著=start; 醒咗/瞓醒=wake. A completed sleep interval has reported start and wake times in start/end time fields; never invent a start for a wake. Only a weight can use time_kind=date, absolute_local=YYYY-MM-DD, no invented midnight. Feeding/diaper/sleep require an instant, not a date-only anchor. For explicit month/day without year, use current local year only if not future; otherwise ask the year.
 Milestones copy a short contiguous observed phrase verbatim into title, preserving words such as waved hello or 第一次識得坐. Do not paraphrase or infer meaning. note copies optional user words or null. occurred_on is a phone-calendar YYYY-MM-DD date; date_precision=day or month (month uses day01); is_first only when explicitly first. No past cue means today's date. Older memories without a usable date clarify. All instant-time and unrelated amount fields null. Never invent an exact date for an age-only memory.
 operation=correct: actions/query null, remove=false for edits and true only for deletions; actions must not be an empty array;  selector={kind,diaper_kind,title,expected_volume_ml}, with every unused selector field null. kind is feeding/diaper/weight/sleep/milestone. Select latest qualifying record only; explicit earlier/nth records clarify and ask the parent to choose in app. remove=true only for an explicit delete/remove request and all changes fields null. Deletion of last wet diaper uses selector.diaper_kind=wet; change last diaper to dirty uses selector.diaper_kind=null and changes.diaper_kind=dirty. Every edit/delete is only a PROPOSAL and requires a separate confirmation.
@@ -176,7 +176,45 @@ function checkKeys(p: Record<string, unknown>, allowed: string[], required = all
 const compact = (p: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(p).filter(([, value]) => value !== null));
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-export function resolveBaby(text: string, name: unknown, babies: Baby[]): Baby | undefined {
+// Pronoun-only multi-profile authorization uses complete simple clauses, not
+// mentions anywhere in arbitrary narration. Complex descriptions need a name.
+function simplePronounRecording(text: string, pronoun: string): boolean {
+  let remaining = text.trim().replace(/^(?:please\s+)?(?:record|log|save)\s+(?:that\s+)?/iu, "");
+  let first = true;
+  while (remaining) {
+    const subject = remaining.match(/^(she|he)(?:['’]s)?\s+/iu);
+    if (subject) {
+      if (subject[1].toLowerCase() !== pronoun) return false;
+      remaining = remaining.slice(subject[0].length);
+    } else if (first) return false;
+    remaining = remaining.replace(/^(?:has\s+)?(?:just\s+)?/iu, "");
+    const amount = remaining.match(
+      /^(?:drank|had|weighed|weighs|weighted)\s+(.+?)\s*(m\.?\s*l\.?|mil|millilitres?|milliliters?|em\s+el|kg|kilograms?)(?![\p{L}\p{N}_])/iu,
+    );
+    const event = remaining.match(
+      /^(?:pee(?:d)?|poop(?:ed)?|poo(?:ed)?|(?:had\s+)?(?:a\s+)?(?:wet(?:\s+and\s+dirty)?|dirty|mixed)\s+(?:diaper|nappy)|fell\s+asleep|woke(?:\s+up)?)(?![\p{L}\p{N}_])/iu,
+    );
+    if (amount) {
+      if (spokenNumber(amount[1]) === undefined) return false;
+      remaining = remaining.slice(amount[0].length);
+    } else if (event) remaining = remaining.slice(event[0].length);
+    else return false;
+    remaining = remaining.replace(/^\s+(?:just\s+now|now)\b/iu, "");
+    const elapsed = remaining.match(/^\s+(.+?)\s+(?:minutes?|hours?)\s+ago\b/iu);
+    if (elapsed) {
+      if (spokenNumber(elapsed[1]) === undefined) return false;
+      remaining = remaining.slice(elapsed[0].length);
+    }
+    remaining = remaining.trim();
+    if (/^[.!。！]*$/u.test(remaining)) return true;
+    const join = remaining.match(/^[,;.]?\s*(?:and|then|also)\s+/iu);
+    if (!join) return false;
+    remaining = remaining.slice(join[0].length);
+    first = false;
+  }
+  return false;
+}
+export function resolveBaby(text: string, name: unknown, babies: Baby[], recording = false): Baby | undefined {
   const spoken = text.normalize("NFC").replace(/\bVictoria\s+Tracker\b/giu, "");
   const explicit = babies.filter((baby) => {
     const n = baby.name.trim().normalize("NFC");
@@ -187,8 +225,29 @@ export function resolveBaby(text: string, name: unknown, babies: Baby[]): Baby |
         spoken,
       );
   });
-  if (explicit.length > 1 || babies.length > 1 && explicit.length !== 1) return;
-  const baby = explicit[0] ?? (babies.length === 1 ? babies[0] : undefined);
+  if (explicit.length > 1) return;
+  let baby = explicit[0] ?? (babies.length === 1 ? babies[0] : undefined);
+  if (recording && babies.length > 1) {
+    // Names are literal evidence; model output and dashboard selection cannot
+    // supply a missing target. Remove names before detecting subject pronouns.
+    let remainder = spoken;
+    for (const profile of explicit) remainder = remainder.replace(new RegExp(escape(profile.name.trim()), "giu"), "");
+    const pronouns = new Set([...remainder.matchAll(/\b(she|he)\b/giu)].map((m) => m[1].toLowerCase()));
+    if (pronouns.size > 1) return;
+    const pronoun = [...pronouns][0];
+    if (baby) {
+      if (pronoun && baby.voice_pronoun !== pronoun) return;
+    } else {
+      if (
+        !pronoun || name !== null || babies.some((b) => !b.voice_pronoun) ||
+        !simplePronounRecording(spoken, pronoun)
+      ) return;
+      const matches = babies.filter((b) => b.voice_pronoun === pronoun);
+      if (matches.length !== 1) return;
+      baby = matches[0];
+    }
+  }
+  if (babies.length > 1 && !recording && explicit.length !== 1) return;
   if (
     !baby ||
     name !== null &&
@@ -212,14 +271,16 @@ const latestCue = (text: string) => /\b(?:last|latest|most recent)\b|上次|最�
 const feedingCue = (text: string) =>
   /\b(?:feed(?:ing)?s?|fed|drank|drunk|drink|bottles?|milk)\b|飲(?:咗|奶)|喝(?:了|奶)|支奶|餵奶/iu.test(text);
 const diaperCue = (text: string) =>
-  /\b(?:diapers?|nappy|nappies|wet|dirty|poop|poo)\b|尿片|尿布|濕|湿|大便|便便|尿尿/iu.test(text);
+  /\b(?:diapers?|nappy|nappies|wet|dirty|poop(?:ed)?|poo(?:ed)?|pee(?:d)?)\b|尿片|尿布|濕|湿|大便|便便|尿尿/iu.test(
+    text,
+  );
 const weightCue = (text: string) =>
   /\b(?:weight|weighs?|weighed|weighted|kilograms?|kg)\b|體重|体重|公斤|千克/iu.test(text);
 const sleepCue = (text: string) => /\b(?:sleep|slept|asleep|nap|woke|wake)\b|瞓|睡|醒/iu.test(text);
 const milestoneCue = (text: string) => /\b(?:milestone|memory|memories)\b|里程碑|成長記錄|成長紀錄/iu.test(text);
 function statedDiaper(text: string): string | undefined {
-  const wet = /\bwet\b|濕|湿|尿尿|小便/iu.test(text);
-  const dirty = /\b(?:dirty|poop|poo|soiled)\b|大便|便便/iu.test(text);
+  const wet = /\b(?:wet|pee(?:d)?)\b|濕|湿|尿尿|小便/iu.test(text);
+  const dirty = /\b(?:dirty|poop(?:ed)?|poo(?:ed)?|soiled)\b|大便|便便/iu.test(text);
   return /\bmixed\b|混合/iu.test(text) || wet && dirty ? "mixed" : wet ? "wet" : dirty ? "dirty" : undefined;
 }
 function compatibleAction(extraction: Record<string, unknown>, evidence: string): boolean {
@@ -539,7 +600,7 @@ export function interpretConversation(
   }
   if (!["batch", "correct", "query"].includes(String(p.operation))) invalid();
   if (typeof p.evidence !== "string" || p.evidence !== text || !text.trim()) return clarification();
-  const baby = resolveBaby(text, p.child_name, babies);
+  const baby = resolveBaby(text, p.child_name, babies, p.operation === "batch");
   if (!baby) {
     return clarification(
       "Which baby is this for? Please repeat one complete request with exactly one baby’s profile name. Nothing was recorded.",

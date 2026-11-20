@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0] - 2026-11-19
+
+- Extend latest-event questions to recorded memory subjects while preserving exact topic matching and date precision.
+- Add an optional She/He/Unspecified voice pronoun to baby profiles, separate from WHO chart selection.
+- Record she/he for the sole baby, or a unique configured pronoun across multiple babies; ask for a name when uncertain.
+- Accept “She/he just drank 160ml,” “pooped” and “peed just now,” preserving atomic persistence and exact quantities.
+- Preserve explicit names for multi-baby questions/corrections and the legacy profile-save contract.
+
 ## [1.2.1] - 2026-11-18
 
 ### Fixed

@@ -85,40 +85,56 @@ export function interpretReadQuery(text: string, c: RequestCommand, followDomain
     /\b(?:tomorrow|next|week|month|previous)\b|\b(?:last|this|past|next) year\b|聽日|明天|上星期|下星期|上個月|第二|前日|尋晚|去年|今年|明年/iu
       .test(temporalText)
   ) return;
-  const firstPhrase = t.match(/\bfirst\s+([^?？。!！,，]+)/u)?.[1] ?? t.match(/第一次([^?？。!！,，]+)/u)?.[1];
-  const firstTopic = firstPhrase?.split(/\s+(?:today|yesterday|this|on|in)\b|係幾時|幾時|係邊日|喺邊日/u)[0].trim();
-  const genericFirst = firstTopic !== undefined && /^(?:milestones?|records?)\b|^(?:成長記錄|里程碑)/u.test(firstTopic);
+  // Temporal uses of "last" are windows, never an event subject or selector.
+  const selectorText = t.replace(
+    /\b(?:last|past)\s+(?:(?:[\w.-]+\s+)?(?:hours?|minutes?|hrs?|mins?)|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/giu,
+    "",
+  ).replace(
+    /(?:過去|最近)[零一二兩三四五六七八九十百\d]+(?:小時|個鐘|分鐘)|上(?:個)?(?:星期|禮拜)[一二三四五六日天]/gu,
+    "",
+  );
+  const subjectPhrase = selectorText.match(/\b(?:first|last|latest|most recent)\s+([^?？。!！,，]+)/u)?.[1] ??
+    selectorText.match(/(?:第一次|上次|最後一次)([^?？。!！,，]+)/u)?.[1];
+  const subjectTopic = subjectPhrase?.split(
+    /\s+(?:today|yesterday|this|on|in|since|before|after)\b|係幾時|幾時|係邊日|喺邊日/u,
+  )[0].trim();
+  const genericSubject = subjectTopic !== undefined &&
+    /^(?:milestones?|records?)\b|^(?:成長記錄|里程碑)/u.test(subjectTopic);
   if (
     /\blast night\b|\brecently\b|\blately\b|尋晚|昨晚/iu.test(t) ||
     /\b(?:since|before|after)\b.*\b(?:first|second|third|earlier|previous)\b|\bat\s+(?:\d|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|noon|midnight)\b/iu
       .test(t)
   ) return;
-  const topicMatch = t.match(
+  const topicMatch = selectorText.match(
     /\b(?:wav(?:e[ds]?|ing)|smil(?:e[ds]?|ing)|crawl(?:ed|s|ing)?|roll(?:ed|s|ing)?)(?: (?!(?:today|yesterday|this|on|in)\b)[a-z]+)*\b|揮手|微笑|笑|爬行|爬|翻身|轉身/iu,
   );
-  const topic = firstTopic && !genericFirst
-    ? normalizeTopic(firstTopic)
+  const topic = subjectTopic && !genericSubject
+    ? normalizeTopic(subjectTopic)
     : topicMatch
     ? normalizeTopic(topicMatch[0])
     : undefined;
-  const wet = /\b(?:wet|pee(?:d|ing)?|wee|urine|number\s*(?:one|1))\b|濕|尿尿|屙尿|小便/iu.test(t);
-  const dirty = /\b(?:dirty|poop(?:ed|ing)?|poo|stool|bowel|number\s*(?:two|2))\b|大便|便便|屙屎/iu.test(t);
-  const nap = /\bnap(?:s|ped|ping)?\b|小睡|午睡/iu.test(t);
-  const wake = /\b(?:up|awake|wake|woke|woken)\b|起身|醒/iu.test(t);
-  const cues: [QueryDomain, boolean][] = [
+  const isWet = (s: string) => /\b(?:wet|pee(?:d|ing)?|wee|urine|number\s*(?:one|1))\b|濕|尿尿|屙尿|小便/iu.test(s);
+  const isDirty = (s: string) =>
+    /\b(?:dirty|poop(?:ed|ing)?|poo|stool|bowel|number\s*(?:two|2))\b|大便|便便|屙屎/iu.test(s);
+  const isNap = (s: string) => /\bnap(?:s|ped|ping)?\b|小睡|午睡/iu.test(s);
+  const isWake = (s: string) => /\b(?:up|awake|wake|woke|woken)\b|起身|醒/iu.test(s);
+  const wet = isWet(t), dirty = isDirty(t), nap = isNap(t), wake = isWake(t);
+  const domainCues: [QueryDomain, (s: string) => boolean][] = [
     [
       "feeding",
-      /\b(?:feed(?:ing|s)?|fed|eat|ate|eaten|drink|drank|drunk|milk|bottles?|nurse|nursed|millilitres?|milliliters?|ml|mil)\b|飲奶|飲咗|食奶|餵奶|奶量/iu
-        .test(t),
+      (s) =>
+        /\b(?:feed(?:ing|s)?|fed|eat|ate|eaten|drink|drank|drunk|milk|bottles?|nurse|nursed|millilitres?|milliliters?|ml|mil)\b|飲奶|飲咗|食奶|餵奶|奶量/iu
+          .test(s),
     ],
-    ["diaper", wet || dirty || /\b(?:diapers?|napp(?:y|ies))\b|尿片/iu.test(t)],
-    ["sleep", nap || wake || /\b(?:sleep(?:ing)?|slept|asleep|bed)\b|瞓|睡/iu.test(t)],
-    ["weight", /\b(?:weight|weigh|heavy|weighed)\b|體重|幾重/iu.test(t)],
-    ["milestone", topic !== undefined || /\bmilestones?\b|成長記錄|里程碑/iu.test(t)],
+    ["diaper", (s) => isWet(s) || isDirty(s) || /\b(?:diapers?|napp(?:y|ies))\b|尿片/iu.test(s)],
+    ["sleep", (s) => isNap(s) || isWake(s) || /\b(?:sleep(?:ing)?|slept|asleep|bed)\b|瞓|睡/iu.test(s)],
+    ["weight", (s) => /\b(?:weight|weigh|heavy|weighed)\b|體重|幾重/iu.test(s)],
   ];
-  // "first feed/sleep/weight" keeps that concrete domain. An otherwise
-  // unclassified "first <phrase>" is an exact lexical milestone subject.
-  if (firstTopic && !genericFirst && !topicMatch && cues.some(([d, yes]) => d !== "milestone" && yes)) {
+  const cues: [QueryDomain, boolean][] = domainCues.map(([domain, matches]) => [domain, matches(t)]);
+  cues.push(["milestone", topic !== undefined || /\bmilestones?\b|成長記錄|里程碑/iu.test(t)]);
+  // First/latest feed, diaper, sleep and weight keep their concrete domain.
+  // Otherwise the parent's contiguous subject is an exact lexical memory topic.
+  if (subjectTopic && !genericSubject && !topicMatch && domainCues.some(([, matches]) => matches(subjectTopic))) {
     cues[cues.length - 1][1] = false;
   }
   const sinceFeeding = !/^how long since/iu.test(t) &&
@@ -166,12 +182,8 @@ export function interpretReadQuery(text: string, c: RequestCommand, followDomain
     /\b(?:she|he|baby) (?:drank|ate|had|slept|woke)\b.*\b(?:ml|mil|minutes?|hours?)\b/iu.test(t) &&
     !/^\s*(?:how|when|what|has|did)/iu.test(t)
   ) return;
-  const latest = /\b(?:last|latest|most recent)\b|上次|最後/iu.test(
-    t.replace(
-      /\b(?:last|past)\s+(?:(?:[\w.-]+\s+)?(?:hours?|minutes?|hrs?|mins?)|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/giu,
-      "",
-    ).replace(/(?:過去|最近)[零一二兩三四五六七八九十百\d]+(?:小時|個鐘|分鐘)/gu, ""),
-  ) && !sinceFeeding && !beforeSleep && !afterSleep;
+  const latest = /\b(?:last|latest|most recent)\b|上次|最後/iu.test(selectorText) && !sinceFeeding &&
+    !beforeSleep && !afterSleep;
   const when = /\bwhen\b|幾時/iu.test(t);
   const duration = /\bhow (?:long|much sleep)\b|幾耐/iu.test(t);
   const elapsed = /\b(?:since|ago)\b|距離|之前幾耐/iu.test(t);

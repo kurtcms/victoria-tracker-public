@@ -447,19 +447,20 @@ extension Backend {
   }
   func saveChild(
     _ existing: Child?, name: String, birthDate: String?, referenceSex: String?,
-    referenceConfirmed: Bool, wasPremature: Bool?, archive: Bool = false
+    referenceConfirmed: Bool, wasPremature: Bool?, voicePronoun: String?, archive: Bool = false
   ) async throws {
     let value: [String: Any] = [
       "p_child_id": existing.map { $0.id.uuidString as Any } ?? NSNull(), "p_name": name,
       "p_birth_date": birthDate.map { $0 as Any } ?? NSNull(),
       "p_reference_sex": referenceSex.map { $0 as Any } ?? NSNull(),
       "p_reference_confirmed": referenceConfirmed,
+      "p_voice_pronoun": voicePronoun.map { $0 as Any } ?? NSNull(),
       "p_was_premature": wasPremature.map { $0 as Any } ?? NSNull(),
       "p_expected_version": existing?.profileVersion.map { $0 as Any } ?? NSNull(),
       "p_archive": archive,
     ]
     _ = try await authorized(
-      path: "/rest/v1/rpc/save_child", method: "POST",
+      path: "/rest/v1/rpc/save_child_with_pronoun", method: "POST",
       body: JSONSerialization.data(withJSONObject: value))
   }
   func pendingCare() throws -> [PendingCareCommand] {

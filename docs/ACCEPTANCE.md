@@ -12,7 +12,7 @@ This procedure is for a deliberate test session, not an automatic checklist to r
 ## Optional regression pass
 
 - Variable quantities and units: 200 millilitres, 190 M L; wet, dirty and mixed changes. Mixed contributes once to each diaper total. Check amounts against both transcript/confirmation and rows.
-- Names: with two babies, an unnamed command must clarify without saving. A named command reaches only that child. Rename a profile and confirm its UUID/history remain.
+- Names: with two babies, an unnamed command must clarify unless a simple recording uses one uniquely configured she/he pronoun and every active profile has a setting. Shared, unset, unknown or conflicting subjects must clarify without saving. A named command reaches only that child. Rename a profile and confirm its UUID/history remain.
 - Relative/date-only time: feeding fifteen minutes earlier; weight on a specific past day without inventing a clock time; exact-day and month-only milestones with appropriate age labels. Future events must reject informatively with no row.
 - Corrections: create a feeding, propose 20 mL leftover, cancel and verify no change; then propose/confirm and verify one revision on the same feeding, no duplicate. Verify revision conflicts do not silently overwrite.
 - Sleep: start, restart/unlock the phone once, confirm the same running session/start, then wake from the other phone. Verify one completed duration and correct day totals across midnight.

@@ -25,6 +25,27 @@ final class CoreTests: XCTestCase {
     return try APIJSON.decoder().decode(
       BabyEvent.self, from: JSONSerialization.data(withJSONObject: object))
   }
+  func testChildPronounDecodesIndependentlyOfGrowthChartAndSupportsOldProfiles() throws {
+    var object: [String: Any] = [
+      "id": child.uuidString, "family_id": parent.uuidString, "name": "Baby", "time_zone": "UTC",
+      "growth_reference_sex": "male",
+    ]
+    func decode() throws -> Child {
+      try APIJSON.decoder().decode(Child.self, from: JSONSerialization.data(withJSONObject: object))
+    }
+    XCTAssertNil(try decode().voicePronoun)
+    for pronoun in ["she", "he"] {
+      object["voice_pronoun"] = pronoun
+      let profile = try decode()
+      XCTAssertEqual(profile.voicePronoun, pronoun)
+      XCTAssertEqual(profile.growthReferenceSex, "male")
+      let encoded =
+        try JSONSerialization.jsonObject(with: APIJSON.encoder().encode(profile)) as! [String: Any]
+      XCTAssertEqual(encoded["voice_pronoun"] as? String, pronoun)
+    }
+    object["voice_pronoun"] = NSNull()
+    XCTAssertNil(try decode().voicePronoun)
+  }
   func testMixedCountsInBothTotalsAndWeightDoesNotChangeMilk() throws {
     let items = try [
       event("feeding", at: "2026-11-12T18:00:00Z", volume: 160),
@@ -121,10 +142,18 @@ final class CoreTests: XCTestCase {
     XCTAssertFalse(response.isPersisted)
     XCTAssertNil(response.event)
   }
-  func testUnclearAndUnavailableInterpretationResponsesKeepGuidanceWithoutClaimingPersistence() throws {
+  func testUnclearAndUnavailableInterpretationResponsesKeepGuidanceWithoutClaimingPersistence()
+    throws
+  {
     let messages = [
-      ("needs_clarification", "clarification", "What exactly happened? Please repeat one complete event with the child, amount and unit or diaper type, and time if needed."),
-      ("rejected", "interpretation_unavailable", "I couldn’t interpret that event right now. Nothing was recorded. Please try again, or use Record an event in Victoria Tracker."),
+      (
+        "needs_clarification", "clarification",
+        "What exactly happened? Please repeat one complete event with the child, amount and unit or diaper type, and time if needed."
+      ),
+      (
+        "rejected", "interpretation_unavailable",
+        "I couldn’t interpret that event right now. Nothing was recorded. Please try again, or use Record an event in Victoria Tracker."
+      ),
     ]
     for (status, code, message) in messages {
       let data = try JSONSerialization.data(withJSONObject: [

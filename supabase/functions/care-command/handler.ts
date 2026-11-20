@@ -132,12 +132,17 @@ export function createHandler(config: Config, deps: Dependencies = { fetch, now:
       }
       const babies: Baby[] = [];
       for (let offset = 0;; offset += 500) {
-        const r = await rest(`children?archived_at=is.null&select=id,name&order=id&limit=500&offset=${offset}`);
+        const r = await rest(
+          `children?archived_at=is.null&select=id,name,voice_pronoun&order=id&limit=500&offset=${offset}`,
+        );
         if (!r.ok) throw new APIError(503, "database_unavailable", "Cannot check the family right now.");
         const page = await r.json();
         if (
           !Array.isArray(page) ||
-          page.some((b) => typeof b.id !== "string" || !uuid.test(b.id) || typeof b.name !== "string")
+          page.some((b) =>
+            typeof b.id !== "string" || !uuid.test(b.id) || typeof b.name !== "string" ||
+            b.voice_pronoun != null && !["she", "he"].includes(b.voice_pronoun)
+          )
         ) throw Error("Invalid roster");
         babies.push(...page);
         if (page.length < 500) break;
