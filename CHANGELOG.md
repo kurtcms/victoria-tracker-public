@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.2] - 2026-11-21
+
+- Refresh public export overlays so complete immediate feeding statements retain the timestamp fix and its regression coverage.
+- Replace identified sample observations with synthetic examples.
+
+## [1.3.1] - 2026-11-21
+
+- Record complete immediate feeding statements such as “just drank 90 mil” at the phone’s captured request time when extraction leaves the time incomplete. Preserve the spoken amount and ask about conflicting time evidence.
+
 ## [1.3.0] - 2026-11-19
 
 - Extend latest-event questions to recorded memory subjects while preserving exact topic matching and date precision.

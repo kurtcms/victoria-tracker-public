@@ -64,7 +64,7 @@ These are synthetic examples of code behavior, not physical speech acceptance re
 | “When was her last wet diaper?”; latest diaper is dirty | Could select latest diaper of any type | Selects latest wet or mixed record and speaks only the relevant time |
 | “How long has she slept today?”; 200 completed minutes, open 61 minutes | Minute total could include open elapsed time | “3 hours and 20 minutes of completed sleep; an open session has 1 hour and 1 minute elapsed, unconfirmed.” |
 | “How much did she drink?” after a latest-feeding answer | No exact-record memory; daily amount interpretation | Prior exact feeding amount, unless an explicit range overrides context |
-| “What was her last weight?”; 7.365 kg, date only | Raw decimal/full date | “6 kilograms and 125 grams,” with an appropriately short measurement date and no clock |
+| “What was her last weight?”; 7.365 kg, date only | Raw decimal/full date | “7 kilograms and 365 grams,” with an appropriately short measurement date and no clock |
 | “Give me a detailed feeding report” | Unsupported or insufficiently specific | Recorded consumption, feed count and individual amounts/times; no diaper/sleep metrics |
 
 ## Verification and limits

@@ -33,7 +33,7 @@ const tens: Record<string, number> = {
   ninety: 90,
 };
 const words = [...Object.keys(small), ...Object.keys(tens), "a", "hundred", "thousand", "and", "point"];
-const mlUnit = "(?:millilitres?|milliliters?|mil|m[ .-]*ls?\\.?|em[ -]+el|毫升)";
+export const mlUnit = "(?:millilitres?|milliliters?|mil|m[ .-]*ls?\\.?|em[ -]+el|毫升)";
 const chineseDigits: Record<string, number> = {
   零: 0,
   〇: 0,

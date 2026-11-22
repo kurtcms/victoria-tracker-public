@@ -205,7 +205,7 @@ xcodebuild -project ios/VictoriaTracker.xcodeproj -scheme VictoriaTracker \
 
 Keep `DEVELOPER_DIR` exported as in step 1. Tests use mocks/synthetic fixtures, not live baby data. [Testing and built-artifact checks](docs/TESTING.md)
 
-The checked-in Xcode project is ready to open. After adding/removing sources/resources, regenerate it with `python3 scripts/generate_project.py`; existing bundle IDs, signing choices and versions are preserved. Bundled WHO tables and the app icon are already included; optional regeneration scripts are under `scripts/`.
+The checked-in Xcode project is ready to open. After adding/removing sources/resources, regenerate it with `python3 scripts/generate_project.py`; existing bundle IDs, signing choices and versions are preserved. The app icon is included; download WHO tables locally as described above. Optional regeneration scripts are under `scripts/`.
 
 ```text
 ios/         SwiftUI app, App Intents, resources and Xcode project

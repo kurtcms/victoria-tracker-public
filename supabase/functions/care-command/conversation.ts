@@ -8,7 +8,14 @@ import {
   type RequestCommand,
   schema,
 } from "./domain.ts";
-import { amountIsGrounded, describesLeftover, quantities, quantityMentions, spokenNumber } from "./quantities.ts";
+import {
+  amountIsGrounded,
+  describesLeftover,
+  mlUnit,
+  quantities,
+  quantityMentions,
+  spokenNumber,
+} from "./quantities.ts";
 import { dateIsGrounded, phraseIsGrounded, statedDates } from "./grounding.ts";
 import { interpretReadQuery, readQuerySchema } from "./query_interpret.ts";
 import { detectLanguage } from "./language.ts";
@@ -152,8 +159,8 @@ Authorized baby profile names: ${
 Return the interpretation inside the root {interpretation: ...} object. Every schema field is required. Null all fields unrelated to the selected operation. evidence copies the ENTIRE original input exactly, including punctuation. language=yue for Cantonese/Chinese and en otherwise. decision=execute for a supported actual event, explicit correction/deletion request, or supported care-record question. decision=clarify for ambiguous/unsupported input, decision=reject for negated/hypothetical/advice/example/future statements, with operation/actions/selector/changes/remove/query all null. Questions are read-only query operations, NEVER events. Never infer an event from a question, negation, plan or quotation.
 operation=batch: actions is one to five entries, all for the same baby, each {evidence,extraction}. Each evidence is an exact contiguous ORIGINAL clause in original order. Cover every event clause; do not omit a difficult part or duplicate a clause. Connector words may be excluded. extraction uses decision=record and one of feeding/diaper/weight/sleep_start/sleep_end/sleep_interval/milestone. All unrelated extraction fields are null. is_first MUST be null for feeding, diaper, weight and sleep; for milestones it is true only when explicitly first and false otherwise. Never copy another clause’s values into an extraction. Never put a query, edit or deletion into a batch. Multiple clauses save together only after every part validates.
 Feeding uses explicit volume_ml; mL, ml, mil, m l, m.l., spoken letters em el and 毫升 mean millilitres. Milk/million are not units. Weight uses explicit kilograms/kg/公斤/千克. Ounces/安士 are unsupported: clarify. Never choose default quantities or infer bottle intake from spillage. Chinese numbers include 一百八十=180, 一百零八=108, 兩百零五=205, 廿五=25, 七點五=7.5. Shortened 一百八/兩百五 are ambiguous: clarify. Ground each quantity in its own clause. Diaper pee/peed/濕尿片/尿尿=wet, poop/pooped/poo/pooed/大便/便便=dirty, both=mixed. Same-event immediate self-correction is one event with final stated details; ambiguity clarifies.
-Times: an event cannot be after the reference even by seconds. No reported time means now. minutes_ago is nonnegative for elapsed past times; half an hour=30, 五分鐘前=5. Absolute times are LOCAL YYYY-MM-DDTHH:mm:ss without a zone suffix; never compute UTC yourself. Specify the reported clock and correct phone-local date; do not replace yesterday/琴日 or a clock with now. Ambiguous clocks/dates clarify. Sleep 瞓著/瞓咗/睡著=start; 醒咗/瞓醒=wake. A completed sleep interval has reported start and wake times in start/end time fields; never invent a start for a wake. Only a weight can use time_kind=date, absolute_local=YYYY-MM-DD, no invented midnight. Feeding/diaper/sleep require an instant, not a date-only anchor. For explicit month/day without year, use current local year only if not future; otherwise ask the year.
-Milestones copy a short contiguous observed phrase verbatim into title, preserving words such as waved hello or 第一次識得坐. Do not paraphrase or infer meaning. note copies optional user words or null. occurred_on is a phone-calendar YYYY-MM-DD date; date_precision=day or month (month uses day01); is_first only when explicitly first. No past cue means today's date. Older memories without a usable date clarify. All instant-time and unrelated amount fields null. Never invent an exact date for an age-only memory.
+Times: an event cannot be after the reference even by seconds. No reported time means now. An immediate feeding such as 'just drank 90 mil' or 'had 90 mil just now' uses time_kind=now with minutes_ago and absolute_local both null, unless a different time is stated. minutes_ago is nonnegative for elapsed past times; half an hour=30, 五分鐘前=5. Absolute times are LOCAL YYYY-MM-DDTHH:mm:ss without a zone suffix; never compute UTC yourself. Specify the reported clock and correct phone-local date; do not replace yesterday/琴日 or a clock with now. Ambiguous clocks/dates clarify. Sleep 瞓著/瞓咗/睡著=start; 醒咗/瞓醒=wake. A completed sleep interval has reported start and wake times in start/end time fields; never invent a start for a wake. Only a weight can use time_kind=date, absolute_local=YYYY-MM-DD, no invented midnight. Feeding/diaper/sleep require an instant, not a date-only anchor. For explicit month/day without year, use current local year only if not future; otherwise ask the year.
+Milestones copy a short contiguous observed phrase verbatim into title, preserving words such as stacked blocks or 第一次識得坐. Do not paraphrase or infer meaning. note copies optional user words or null. occurred_on is a phone-calendar YYYY-MM-DD date; date_precision=day or month (month uses day01); is_first only when explicitly first. No past cue means today's date. Older memories without a usable date clarify. All instant-time and unrelated amount fields null. Never invent an exact date for an age-only memory.
 operation=correct: actions/query null, remove=false for edits and true only for deletions; actions must not be an empty array;  selector={kind,diaper_kind,title,expected_volume_ml}, with every unused selector field null. kind is feeding/diaper/weight/sleep/milestone. Select latest qualifying record only; explicit earlier/nth records clarify and ask the parent to choose in app. remove=true only for an explicit delete/remove request and all changes fields null. Deletion of last wet diaper uses selector.diaper_kind=wet; change last diaper to dirty uses selector.diaper_kind=null and changes.diaper_kind=dirty. Every edit/delete is only a PROPOSAL and requires a separate confirmation.
 Feeding total correction 'change last feed from 30ml to 80ml' uses expected_volume_ml=30, changes.correction_kind=total, amount_ml=80. 'from 30 to 80 mil' inherits the final unit for old 30 only. Simple 'change last feed to 80 mil' has expected_volume_ml=null. Left 20 mL / 剩返二十毫升 means leftover correction, amount_ml=20; never a new feeding. For other edits fill only the explicitly requested replacement fields. Dates use measurement_date or occurred_on; timestamp changes need an exact unambiguous instant, otherwise clarify/use app. Preserve all unspecified values. Never answer a correction as though applied.
 operation=query: actions/selector/changes/remove null. Prefer the compositional query schema for conversational reads: domain feeding/diaper/sleep/weight/milestone/care; operation latest/first/exists/count/total/state/elapsed/duration/report. Keep state distinct from historical existence; wet/dirty include mixed, all diapers count changes once; naps mean daytime sleep, not all sleep. quantity consumed/offered/remaining must preserve the question. day and period are grounded by deterministic server code, never calculate answers. Use the legacy {kind,day} alternative only for existing kinds described below. Current-state sleep uses state, 'has slept' exists, 'last pee' latest wet diaper. English, Cantonese and code-switching synonyms carry the same domain/operation meaning. No missing record establishes real-world absence. Unknown/ambiguous temporal references clarify.  Questions about falling asleep use last_sleep_start, waking use last_sleep_end. Status report / care report use care_report (today totals plus latest feeding and sleep state), never a recording. query.kind is last_feeding (when and amount), milk_total (milk amount only), day_summary (full totals), wet_count, dirty_count, has_dirty, sleep_total, last_weight, last_milestone, last_diaper, last_sleep_start, last_sleep_end or care_report. day is explicit today/yesterday/ISO/English or Chinese calendar date, defaults to phone today for day totals and null for all-time last-record questions. Don't invent a clock window or select a different metric. 'How much has she drunk today?' is milk_total, 'when and how much was the last feeding?' last_feeding. 今日飲咗幾多奶=milk_total; 今日幾多濕尿片=wet_count; 今日有冇大便=has_dirty. Questions outside saved care facts, medical advice and ambiguous multi-day windows clarify; the database supplies all answers.`;
@@ -304,6 +311,18 @@ function compatibleAction(extraction: Record<string, unknown>, evidence: string)
 }
 function connector(text: string): boolean {
   return /^(?:[\s,，。.;；:：!！、]|\b(?:and|then|also)\b|同埋|跟住|然後|並且|再)*$/iu.test(text);
+}
+function immediateFeeding(evidence: string, baby: Baby): boolean {
+  // Match a complete feeding clause so an unrelated "just" cannot supply its time.
+  const match = evidence.trim().normalize("NFKC").match(
+    new RegExp(
+      `^(?:(?:${
+        escape(baby.name.trim().normalize("NFKC"))
+      }|she|he)\\s+)?(just\\s+)?(?:drank|had)\\s+(.+?)\\s*${mlUnit}(\\s+just\\s+now)?[.!。！]*$`,
+      "iu",
+    ),
+  );
+  return !!match && !!(match[1] || match[3]) && spokenNumber(match[2]) !== undefined;
 }
 function calendarTimeGrounded(e: Record<string, unknown>, text: string, c: RequestCommand): boolean {
   const today = phoneDate(c.reference_at, c), days = statedDates(text, today);
@@ -672,6 +691,15 @@ export function interpretConversation(
     if (start < 0 || !connector(text.slice(cursor, start))) return clarification();
     cursor = start + part.evidence.length;
     const extraction = object(part.extraction);
+    const timeKind = extraction.time_kind;
+    if (
+      extraction.action === "feeding" && extraction.absolute_local === null &&
+      (timeKind === null || timeKind === "now" || timeKind === "relative") &&
+      (extraction.minutes_ago === null || extraction.minutes_ago === 0) && immediateFeeding(part.evidence, baby)
+    ) {
+      extraction.time_kind = "now";
+      extraction.minutes_ago = null;
+    }
     if (
       extraction.decision !== "record" || !compatibleAction(extraction, part.evidence) ||
       !relativeTimeGrounded(extraction, part.evidence, c)

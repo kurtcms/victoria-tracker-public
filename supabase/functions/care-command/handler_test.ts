@@ -346,13 +346,13 @@ Deno.test("unsupported weight values, lost dates and invented milestone words ne
     equal((await response.json()).status, "needs_clarification");
     assert(!s.saved());
   }
-  const text = "Victoria first waved hello on Nov 1st";
+  const text = "Victoria first clapped twice on Nov 2nd";
   const milestone = extracted({
     action: "milestone",
     volume_ml: null,
     time_kind: null,
-    title: "First waved hello",
-    occurred_on: "2026-11-01",
+    title: "First clapped twice",
+    occurred_on: "2026-11-02",
     date_precision: "day",
     is_first: true,
   });
@@ -370,11 +370,11 @@ Deno.test("unsupported weight values, lost dates and invented milestone words ne
   equal((await (await good.handler(request({ ...command, text }))).json()).status, "recorded");
   equal(
     (good.saved()?.p_payload as { actions: { payload: Record<string, unknown> }[] }).actions[0].payload.title,
-    "First waved hello",
+    "First clapped twice",
   );
   equal(
     (good.saved()?.p_payload as { actions: { payload: Record<string, unknown> }[] }).actions[0].payload.occurred_on,
-    "2026-11-01",
+    "2026-11-02",
   );
 });
 
@@ -602,6 +602,31 @@ Deno.test("milk-only question returns only the stored milk total without trailin
   assert(!s.calls.some((c) => c.includes("openai")));
 });
 
+Deno.test("just drank with a spoken unit records at the captured time even if extraction leaves time incomplete", async () => {
+  const text = "Oliver just drank 95 mil";
+  for (const [time_kind, minutes_ago] of [[null, null], ["relative", 0], ["relative", null], ["now", 0]] as const) {
+    const s = setup({
+      expectedText: text,
+      model: extracted({ child_name: "Oliver", volume_ml: 95, time_kind, minutes_ago }),
+    });
+    const body = await (await s.handler(request({ ...command, text }))).json();
+    equal(body.status, "recorded");
+    equal(s.saved()?.p_child_id, babies[1].id);
+    equal(s.saved()?.p_payload, {
+      actions: [{
+        action: "record",
+        payload: {
+          event_type: "feeding",
+          occurred_at: command.reference_at,
+          volume_ml: 95,
+          diaper_kind: null,
+          weight_kg: null,
+        },
+      }],
+    });
+  }
+});
+
 Deno.test("recent had/drank statements preserve quantities and reference time through persistence", async () => {
   const items: [string, number | null, string | null][] = [
     ["a wet diaper", null, "wet"],
@@ -639,8 +664,7 @@ Deno.test("recent had/drank statements preserve quantities and reference time th
               minutes_ago: timing === "relative" ? 0 : null,
             }),
           });
-          // "just had" alone does not ground a model's relative zero; "just now" does.
-          const accepted = timing === "now" || text.includes("just now");
+          const accepted = !diaper || timing === "now" || text.includes("just now");
           const body = await (await s.handler(request({ ...command, text }))).json();
           equal(body.status, accepted ? "recorded" : "needs_clarification");
           if (!accepted) {
@@ -684,6 +708,9 @@ Deno.test("recent feeding wording cannot bypass safety quantity time or baby gro
     ["She had 60ml just now.", {}, true],
     ["She had a wet diaper and 60ml just now.", {}],
     ["She had 60ml left just now.", {}],
+    ["She just drank 60ml some time earlier.", { time_kind: null }],
+    ["She just drank 60ml at 9am.", { time_kind: null }],
+    ["She just drank 60ml.", { time_kind: "relative", minutes_ago: 5 }],
   ];
   for (const [text, patch, multiple] of cases) {
     const s = setup({

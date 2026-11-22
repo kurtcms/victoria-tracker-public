@@ -10,7 +10,7 @@
 
 ## Local checkout roles
 
-When maintaining both repositories, keep permanent sibling folders named `victoria-tracker-private` and `victoria-tracker-public`. Develop and test in the private checkout; use the public checkout to prepare reviewed, sanitized releases. Keep their remotes and histories separate. Public-only contributors can still build the public repository independently using its README.
+This repository is a sanitized source release with independent history. Public contributors can build and test it directly using its README. Maintainers regenerate reviewed snapshots in their development repository; keep unrelated private history and operational records out of this repository.
 
 ## Product decisions to preserve
 

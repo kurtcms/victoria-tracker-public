@@ -1,8 +1,18 @@
 # Release status
 
+## v1.3.2 — corrected feeding export
+
+The public runtime and regression fixtures include the immediate-feeding timestamp fix described below. Examples use synthetic observations. The source passes backend type checks and 197 mocked tests, Python/security, isolated PostgreSQL, 61 Swift core and 73 native simulator tests, an unsigned Release build, deterministic project generation, Siri-resource checks and bundle scanning. Numerical WHO tables are validated from local downloads and excluded from publication. No new physical speech or paid-model accuracy is claimed.
+
+## v1.3.1 — immediate feeding timestamps
+
+A complete feeding statement with “just drank” or “just now” can use the phone’s captured request time when extraction leaves the time incomplete. The change preserves the spoken amount and baby selection. Synthetic handler tests check the persistence payload and conflicting times.
+
+The update is prepared for iOS 1.0/build 19. Automated fixtures do not establish on-device speech recognition.
+
 ## v1.3.0 — pronoun recordings
 
-Adds separate optional voice pronouns, deterministic recording targets and peed/pooped wording. Existing profiles stay unspecified. Multi-baby questions/corrections still use profile names. Automated fixtures do not establish physical recognition or paid-model accuracy. Source publication, backend deployment and build-18 installation evidence is pending until verified.
+Adds separate optional voice pronouns, deterministic recording targets and peed/pooped wording. Existing profiles stay unspecified. Multi-baby questions/corrections still use profile names. Automated fixtures do not establish physical recognition or paid-model accuracy. This describes source behavior; deployment and installation use each operator’s own backend and signing configuration.
 
 ## v1.2.1 — iOS 1.0 (17)
 
@@ -24,7 +34,7 @@ Compositional interpretation distinguishes recorded sleep state from historical 
 
 The v1.2.0 sanitized source passed 145 current-care and 42 legacy backend tests/type checks, 60 Swift core tests, 72 native simulator tests, six Python security tests, isolated PostgreSQL, unsigned iPhone-SDK compilation, source/bundle secret scans and compiled English/Cantonese Siri-resource checks. Validation-only WHO CSVs matched the pinned manifest and remain excluded from publication.
 
-For v1.2.1, application/backend/test/configuration bytes and modes are unchanged; those source-bound results remain applicable. Documentation, local links, release mappings, the exact exported tree and secret/privacy boundaries are rechecked. This source-only metadata patch does not install a new binary or establish new live model/speech accuracy. Historical v1.1.0 results remain recorded in its immutable release; counts from different releases are not combined. Run [testing](TESTING.md) to reproduce checks with synthetic mocks or disposable PostgreSQL.
+For v1.2.1, application/backend/test/configuration bytes and modes are unchanged; those source-bound results remain applicable. Documentation, local links, release mappings, the exact exported tree and secret/privacy boundaries are rechecked. This source-only metadata patch does not install a new binary or establish new live model/speech accuracy. Historical results remain separate; older source tags were sanitized only to replace sample observation values, and their rewritten trees were revalidated. Counts from different releases are not combined. Run [testing](TESTING.md) to reproduce checks with synthetic mocks or disposable PostgreSQL.
 
 Historical bounded physical checks are documented in [acceptance coverage](ACCEPTANCE.md). They do not prove every new paraphrase, historical window, follow-up or Cantonese response. Do not restart stopped physical/paid suites without explicit authorization.
 
